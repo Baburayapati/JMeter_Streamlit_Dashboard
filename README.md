@@ -422,3 +422,76 @@ streamlit run app.py
 - The chatbot is deterministic and runs locally inside Streamlit.
 - No OpenAI API key is required.
 - The Excel report download still works exactly as before.
+
+
+## v43 Smart Report Chatbot
+
+The chatbot has been upgraded to answer a wider range of report questions locally, without an external AI key.
+
+It can answer:
+- SLA pass/fail and SLA breach questions
+- Top slow APIs by avg/min/max/P90/P95/P99
+- Top error APIs by error count or error %
+- Track/feature summaries
+- AskAI and non-AskAI questions
+- Sample count and volume questions
+- Report context: users, devices, date, duration, region
+- Multi-file comparison and regression questions
+- Keyword searches for any track, scenario, endpoint, or API name
+
+
+## v44 Removed Min Errors Filter
+
+- Removed the `Min Errors` filter from the Streamlit dashboard.
+- Error analysis remains available through:
+  - ErrorCount
+  - ErrorPct
+  - Top Error APIs chart
+  - Chatbot questions like `top error APIs`
+
+
+## v45 Tableau-Style Executive Dashboard
+
+This version upgrades the Streamlit UI to a Tableau-style executive dashboard like the reference layout.
+
+### Dashboard sections
+- Aggregated Performance Overview
+- KPI cards
+- SLA donut chart
+- Within-run comparison
+- Cross-run comparison when two or more files are uploaded
+- Performance heatmap
+- Metrics distribution
+- Auto insight box
+- Drilldown table
+- Smart chatbot
+
+### Open dashboard in new tab
+After deployment, add your deployed URL in Streamlit secrets:
+
+```toml
+DASHBOARD_URL = "https://your-dashboard-name.streamlit.app"
+```
+
+The app will show an **Open Dashboard in New Tab ↗** link.
+
+### Deploy to Streamlit Community Cloud
+1. Push these files to GitHub:
+   - `app.py`
+   - `main.py`
+   - `requirements.txt`
+   - `README.md`
+2. Go to Streamlit Community Cloud.
+3. Click **New app**.
+4. Select repo and branch.
+5. Main file path: `app.py`.
+6. Click **Deploy**.
+7. Copy the generated URL and share it with your team.
+
+### Local run
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -r requirements.txt
+streamlit run app.py
+```
