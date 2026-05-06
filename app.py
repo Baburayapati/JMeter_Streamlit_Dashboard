@@ -9,6 +9,7 @@ from typing import Dict, List, Tuple
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+import streamlit.components.v1 as components
 
 from main import build_report, build_comparison_report, build_single_report_frames
 
@@ -172,6 +173,177 @@ def track_summary(df: pd.DataFrame) -> pd.DataFrame:
     return out.sort_values(["P95_Sec", "Avg_Sec", "Errors"], ascending=False)
 
 
+
+
+def region_from_frames(frames: Dict[str, pd.DataFrame]) -> str:
+    info = frames.get("Run_Info")
+    if info is not None and not info.empty and "Region" in info.columns:
+        region = str(info.iloc[0].get("Region", "N/A")).strip()
+        return region if region and region.upper() != "N/A" else "Unknown"
+    label = str(frames.get("Label", ""))
+    upper = label.upper()
+    for region in ["US", "EMEA", "APJC", "AMER", "EU", "LATAM", "INDIA"]:
+        if re.search(rf"(?:^|[_\-\s]){region}(?:$|[_\-\s])", upper):
+            return region
+    return "Unknown"
+
+
+def add_region_to_frames(run_frames: List[Dict[str, pd.DataFrame]]) -> List[Dict[str, pd.DataFrame]]:
+    for frames in run_frames:
+        frames["Region"] = region_from_frames(frames)
+    return run_frames
+
+
+def sla_color_for_track(track_name: str, p95_value: float) -> float:
+    """Return 1 when within SLA, 0 when breached. Used for green/red heatmaps."""
+    threshold = 10 if str(track_name).upper().startswith("ASKAI") else 2
+    return 1 if float(p95_value or 0) < threshold else 0
+
+
+def render_open_new_tab_button() -> None:
+    """Open current app in a new tab. If DASHBOARD_URL secret exists, open that URL."""
+    try:
+        dashboard_url = st.secrets.get("DASHBOARD_URL", "")
+    except Exception:
+        dashboard_url = ""
+
+    if dashboard_url:
+        st.markdown(
+            f'<div style="text-align:center"><a class="open-link" href="{dashboard_url}" target="_blank">Open Dashboard in New Tab ↗</a></div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        components.html(
+            """
+            <div style="text-align:center; margin: 0 0 10px 0;">
+              <button
+                onclick="window.open(window.parent.location.href, '_blank')"
+                style="
+                  background: linear-gradient(90deg, #1565c0, #0b8043);
+                  color: white;
+                  padding: 8px 14px;
+                  border: 0;
+                  border-radius: 9px;
+                  font-weight: 700;
+                  font-size: 13px;
+                  box-shadow: 0 5px 16px rgba(21,101,192,0.22);
+                  cursor: pointer;">
+                Open Dashboard in New Tab ↗
+              </button>
+            </div>
+            """,
+            height=44,
+        )
+
+
+def render_region_comparison(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
+    region_rows = []
+    for frames in run_frames:
+        df = frames["APIs"].copy()
+        region = frames.get("Region", region_from_frames(frames))
+        s = summarize_run(df)
+        s["Region"] = region
+        s["Run"] = frames["Label"]
+        region_rows.append(s)
+
+    if not region_rows:
+        return
+
+    region_summary = pd.DataFrame(region_rows)
+    available_regions = sorted(region_summary["Region"].dropna().astype(str).unique().tolist())
+
+    st.markdown('<div class="panel"><div class="panel-title teal-title">REGION COMPARISON</div>', unsafe_allow_html=True)
+
+    selected_regions = st.multiselect(
+        "Compare Regions",
+        available_regions,
+        default=available_regions,
+        help="Upload files with region names like US, EMEA, or APJC in the filename. Example: ..._US_1Hour_April-19-2026_Report.json",
+    )
+
+    filtered_summary = region_summary[region_summary["Region"].isin(selected_regions)].copy()
+    if filtered_summary.empty:
+        st.warning("No selected region data found.")
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+
+    st.dataframe(
+        filtered_summary[["Region", "Run", "avg_sec", "p95_sec", "success_rate", "error_rate", "sla_compliance", "performance_score", "transactions"]],
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    c1, c2 = st.columns(2)
+    fig_region_p95 = px.bar(
+        filtered_summary,
+        x="Region",
+        y="p95_sec",
+        color="Region",
+        text="p95_sec",
+        title="Region Comparison - P95 Response Time",
+    )
+    fig_region_p95.update_traces(texttemplate="%{text:.2f}s", textposition="outside")
+    fig_region_p95.update_layout(height=300, margin=dict(l=10, r=10, t=45, b=30), xaxis_title="", yaxis_title="P95 sec")
+    c1.plotly_chart(fig_region_p95, use_container_width=True)
+
+    fig_region_error = px.bar(
+        filtered_summary,
+        x="Region",
+        y="error_rate",
+        color="Region",
+        text="error_rate",
+        title="Region Comparison - Error Rate %",
+    )
+    fig_region_error.update_traces(texttemplate="%{text:.2f}%", textposition="outside")
+    fig_region_error.update_layout(height=300, margin=dict(l=10, r=10, t=45, b=30), xaxis_title="", yaxis_title="Error Rate %")
+    c2.plotly_chart(fig_region_error, use_container_width=True)
+
+    # Track x Region heatmap based on P95 SLA status: green only when meeting SLA, red when breaching.
+    region_track_rows = []
+    for frames in run_frames:
+        region = frames.get("Region", region_from_frames(frames))
+        if region not in selected_regions:
+            continue
+        ts = track_summary(frames["APIs"])
+        for _, row in ts.iterrows():
+            region_track_rows.append({
+                "Region": region,
+                "Track": row["Feature"],
+                "P95 Sec": row["P95_Sec"],
+                "SLA Match": sla_color_for_track(row["Feature"], row["P95_Sec"]),
+            })
+
+    region_track_df = pd.DataFrame(region_track_rows)
+    if not region_track_df.empty:
+        top_tracks = (
+            region_track_df.groupby("Track")["P95 Sec"]
+            .max()
+            .sort_values(ascending=False)
+            .head(12)
+            .index
+            .tolist()
+        )
+        region_track_df = region_track_df[region_track_df["Track"].isin(top_tracks)]
+        p95_pivot = region_track_df.pivot_table(index="Track", columns="Region", values="P95 Sec", aggfunc="mean").fillna(0)
+        match_pivot = region_track_df.pivot_table(index="Track", columns="Region", values="SLA Match", aggfunc="mean").reindex(index=p95_pivot.index, columns=p95_pivot.columns).fillna(0)
+
+        fig_region_heat = px.imshow(
+            match_pivot,
+            text_auto=False,
+            color_continuous_scale=[(0, "#C62828"), (0.499, "#C62828"), (0.5, "#2E7D32"), (1, "#2E7D32")],
+            aspect="auto",
+            title="Region Performance Heatmap: Green = P95 Meets SLA, Red = SLA Breach",
+            zmin=0,
+            zmax=1,
+        )
+        # Put P95 values as text; color is based only on SLA match.
+        fig_region_heat.update_traces(text=p95_pivot.round(2).astype(str) + "s", texttemplate="%{text}")
+        fig_region_heat.update_layout(height=360, margin=dict(l=10, r=10, t=55, b=25), coloraxis_showscale=False)
+        st.plotly_chart(fig_region_heat, use_container_width=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
 def render_kpis(df: pd.DataFrame) -> None:
     s = summarize_run(df)
     c1, c2, c3, c4, c5, c6 = st.columns(6)
@@ -269,16 +441,41 @@ def render_tableau_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
             if not heat.empty:
                 pivot = heat.pivot_table(index="Feature", columns="Run", values="P95_Sec", aggfunc="mean").fillna(0)
                 pivot = pivot.loc[pivot.max(axis=1).sort_values(ascending=False).head(8).index]
-                fig_heat = px.imshow(pivot, text_auto=".1f", title="Performance Heatmap (P95)", color_continuous_scale="RdYlGn_r", aspect="auto")
-                fig_heat.update_layout(height=310, margin=dict(l=10, r=10, t=40, b=20))
+                match = pivot.copy()
+                for track_name in match.index:
+                    for col_name in match.columns:
+                        match.loc[track_name, col_name] = sla_color_for_track(track_name, pivot.loc[track_name, col_name])
+                fig_heat = px.imshow(
+                    match,
+                    text_auto=False,
+                    title="Performance Heatmap: Green = P95 Meets SLA, Red = SLA Breach",
+                    color_continuous_scale=[(0, "#C62828"), (0.499, "#C62828"), (0.5, "#2E7D32"), (1, "#2E7D32")],
+                    aspect="auto",
+                    zmin=0,
+                    zmax=1,
+                )
+                fig_heat.update_traces(text=pivot.round(2).astype(str) + "s", texttemplate="%{text}")
+                fig_heat.update_layout(height=310, margin=dict(l=10, r=10, t=50, b=20), coloraxis_showscale=False)
                 st.plotly_chart(fig_heat, use_container_width=True)
         else:
             tracks = track_summary(df)
             if not tracks.empty:
                 st.dataframe(tracks[["Feature", "Track Type", "APIs", "Avg_Sec", "P95_Sec", "Max_Sec", "Errors", "SLA Fail %"]].head(10), use_container_width=True, hide_index=True)
-                pivot = tracks.head(12).set_index("Feature")[["Avg_Sec", "P95_Sec", "Max_Sec", "Errors"]]
-                fig_heat = px.imshow(pivot, text_auto=".1f", title="Metrics Distribution by Track", color_continuous_scale="RdYlGn_r", aspect="auto")
-                fig_heat.update_layout(height=360, margin=dict(l=10, r=10, t=40, b=20))
+                p95_table = tracks.head(12).copy()
+                p95_table["SLA Match"] = p95_table.apply(lambda r: sla_color_for_track(r["Feature"], r["P95_Sec"]), axis=1)
+                heat_values = p95_table.set_index("Feature")[["SLA Match"]]
+                p95_text = p95_table.set_index("Feature")[["P95_Sec"]].round(2).astype(str) + "s"
+                fig_heat = px.imshow(
+                    heat_values,
+                    text_auto=False,
+                    title="Metrics Dashboard by Track: Green = P95 Meets SLA, Red = SLA Breach",
+                    color_continuous_scale=[(0, "#C62828"), (0.499, "#C62828"), (0.5, "#2E7D32"), (1, "#2E7D32")],
+                    aspect="auto",
+                    zmin=0,
+                    zmax=1,
+                )
+                fig_heat.update_traces(text=p95_text, texttemplate="%{text}")
+                fig_heat.update_layout(height=360, margin=dict(l=10, r=10, t=50, b=20), coloraxis_showscale=False)
                 st.plotly_chart(fig_heat, use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -452,13 +649,7 @@ def chat_answer(question: str, run_frames: List[Dict[str, pd.DataFrame]]) -> Tup
 st.markdown(f"<div class='dashboard-title'>{APP_TITLE}</div>", unsafe_allow_html=True)
 st.markdown("<div class='dashboard-subtitle'>Upload one JMeter <code>statistics.json</code> file for a normal dashboard. Upload two or more files for comparison.</div>", unsafe_allow_html=True)
 
-dashboard_url = ""
-try:
-    dashboard_url = st.secrets.get("DASHBOARD_URL", "")
-except Exception:
-    dashboard_url = ""
-if dashboard_url:
-    st.markdown(f'<div style="text-align:center"><a class="open-link" href="{dashboard_url}" target="_blank">Open Dashboard in New Tab ↗</a></div>', unsafe_allow_html=True)
+render_open_new_tab_button()
 
 st.markdown(
     """
@@ -527,6 +718,7 @@ if uploaded_files and generate_clicked:
                 build_comparison_report(json_paths, labels, output_path)
                 st.success("Comparison Tableau dashboard and Excel report generated successfully.")
 
+            run_frames = add_region_to_frames(run_frames)
             st.session_state.excel_bytes = output_path.read_bytes()
             st.session_state.run_frames = run_frames
             st.session_state.report_file_name = "JMeter_Report.xlsx"
@@ -544,6 +736,7 @@ if st.session_state.excel_bytes:
 
 if st.session_state.run_frames:
     render_tableau_dashboard(st.session_state.run_frames)
+    render_region_comparison(st.session_state.run_frames)
     render_drilldown(st.session_state.run_frames)
 
     st.divider()

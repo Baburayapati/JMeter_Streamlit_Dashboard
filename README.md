@@ -495,3 +495,22 @@ source .venv/bin/activate
 python3 -m pip install -r requirements.txt
 streamlit run app.py
 ```
+
+
+## v46 Region Comparison + SLA-based Colors
+
+- Added Region Comparison panel.
+- Upload multiple files with region in filename, for example:
+  - `..._US_1Hour_April-19-2026_Report.json`
+  - `..._EMEA_1Hour_April-19-2026_Report.json`
+  - `..._APJC_1Hour_April-19-2026_Report.json`
+- Region comparison supports:
+  - Region P95 response time
+  - Region error rate
+  - Track x Region heatmap
+- Heatmap colors now mean:
+  - Green = P95 meets SLA
+  - Red = P95 breaches SLA
+- Added an `Open Dashboard in New Tab` button in the UI.
+  - If `DASHBOARD_URL` is configured in Streamlit secrets, it opens that URL.
+  - Otherwise, it opens the current app URL in a new browser tab.
