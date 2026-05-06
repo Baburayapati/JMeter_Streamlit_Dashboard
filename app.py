@@ -17,6 +17,17 @@ from main import build_report, build_comparison_report, build_single_report_fram
 APP_TITLE = "CiscoIQ-SaaS-Support-Services Performance Dashboard"
 
 st.set_page_config(page_title=APP_TITLE, layout="wide")
+params = st.query_params
+dashboard_only = params.get("view", "") == "dashboard"
+
+
+if dashboard_only:
+    st.markdown("""
+    <style>
+    section[data-testid="stSidebar"] {display:none;}
+    .block-container {padding-top: 1rem;}
+    </style>
+    """, unsafe_allow_html=True)
 
 st.markdown(
     """
@@ -217,7 +228,7 @@ def render_open_new_tab_button() -> None:
             """
             <div style="text-align:center; margin: 0 0 10px 0;">
               <button
-                onclick="window.open(window.parent.location.href, '_blank')"
+                onclick="window.open(window.parent.location.href + '?view=dashboard', '_blank')"
                 style="
                   background: linear-gradient(90deg, #1565c0, #0b8043);
                   color: white;
@@ -387,7 +398,7 @@ def render_tableau_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
     latest = run_frames[-1]
     df = latest["APIs"].copy()
 
-    st.markdown('<div class="panel"><div class="panel-title green-title">AGGREGATED PERFORMANCE OVERVIEW</div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel"><div class="panel-title green-title">INSIGHTS</div>', unsafe_allow_html=True)
     render_kpis(df)
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -679,7 +690,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-uploaded_files = st.file_uploader("Upload statistics.json file(s)", type=["json"], accept_multiple_files=True)
+if not dashboard_only:
+    uploaded_files = st.file_uploader("Upload statistics.json file(s)", type=["json"], accept_multiple_files=True)
+else:
+    uploaded_files = []
 
 if "excel_bytes" not in st.session_state:
     st.session_state.excel_bytes = None
