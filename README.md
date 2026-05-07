@@ -592,3 +592,18 @@ streamlit run app.py
   - AI Chatbot
 - Removed non-clickable static cards.
 - Removed the extra success/info text after generation.
+
+
+## v54 Clickable tabs + dashboard Track Comparison
+
+- Dashboard title changed to CiscoIQ-SaaS-SupportServices Performance Dashboard.
+- Top navigation tabs are now real clickable Streamlit tabs:
+  - Overview
+  - Compare
+  - Trends
+  - Drilldown
+  - Reports
+  - Chatbot
+- View all links are now clickable buttons and route to the correct dashboard section.
+- Dashboard Compare tab now shows Track Comparison tables using the same logic as Excel Track_Comparison.
+- Chatbot examples expanded and irrelevant questions get a report-focused response.

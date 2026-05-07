@@ -459,24 +459,17 @@ def combined_df(run_frames: List[Dict[str, pd.DataFrame]]) -> pd.DataFrame:
     return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
 
 
-def top_nav() -> None:
+
+def top_nav() -> str:
     st.markdown(
         """
 <div class="top-nav">
   <div class="brand">
     <div class="brand-icon">↯</div>
     <div>
-      <div class="brand-title">JMeter Performance Dashboard</div>
+      <div class="brand-title">CiscoIQ-SaaS-SupportServices Performance Dashboard</div>
       <div class="brand-sub">Real-time Performance Insights Across Regions</div>
     </div>
-  </div>
-  <div class="nav-tabs">
-    <div class="nav-tab active">▣ Overview</div>
-    <div class="nav-tab">▥ Compare</div>
-    <div class="nav-tab">⌁ Trends</div>
-    <div class="nav-tab">⌕ Drilldown</div>
-    <div class="nav-tab">☰ Reports</div>
-    <div class="nav-tab">◌ Chatbot</div>
   </div>
   <div class="nav-time">Dashboard View<br/>Last Updated</div>
 </div>
@@ -484,6 +477,16 @@ def top_nav() -> None:
         unsafe_allow_html=True,
     )
 
+    if "nav_tab" not in st.session_state:
+        st.session_state.nav_tab = "Overview"
+
+    return st.radio(
+        "Dashboard Navigation",
+        ["Overview", "Compare", "Trends", "Drilldown", "Reports", "Chatbot"],
+        horizontal=True,
+        key="nav_tab",
+        label_visibility="collapsed",
+    )
 
 
 def kpi_cards(df: pd.DataFrame) -> None:
@@ -577,8 +580,151 @@ def auto_insights(run_frames: List[Dict[str, pd.DataFrame]]) -> List[Tuple[str, 
     return result[:4]
 
 
+
+def response_bucket(value: float, is_askai: bool) -> str:
+    value = float(value or 0)
+    if is_askai:
+        if value <= 10:
+            return "0-10s %"
+        if value <= 20:
+            return "10-20s %"
+        if value <= 30:
+            return "20-30s %"
+        return ">30s %"
+    if value <= 2:
+        return "0-2s %"
+    if value <= 4:
+        return "3-4s %"
+    if value <= 6:
+        return "4-6s %"
+    return ">6s %"
+
+
+def metric_bucket_summary(df: pd.DataFrame, track: str, metric: str, is_askai: bool) -> List[float]:
+    col_map = {
+        "Avg": "Avg ResTime in sec",
+        "Min": "Min ResTime in sec",
+        "Max": "MaxRes Time in sec",
+    }
+    col = col_map[metric]
+    rows = df[df["Feature"].astype(str) == str(track)].copy()
+    if rows.empty or col not in rows.columns:
+        return [0, 0, 0, 0, 0]
+
+    bucket_names = ["0-10s %", "10-20s %", "20-30s %", ">30s %"] if is_askai else ["0-2s %", "3-4s %", "4-6s %", ">6s %"]
+    counts = dict.fromkeys(bucket_names, 0)
+    values = pd.to_numeric(rows[col], errors="coerce").fillna(0)
+    for value in values:
+        counts[response_bucket(float(value), is_askai)] += 1
+    total = len(values) if len(values) else 1
+    percentages = [round(counts[name] / total * 100, 2) for name in bucket_names]
+    return percentages + [round(float(values.max()), 2)]
+
+
+def build_dashboard_track_comparison(run_frames: List[Dict[str, pd.DataFrame]]) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    all_tracks = sorted(set().union(*[set(frames["APIs"]["Feature"].dropna().astype(str)) for frames in run_frames]))
+    all_tracks = [t for t in all_tracks if t.lower() != "total" and "select customer" not in t.lower()]
+
+    askai_tracks = [t for t in all_tracks if t.upper().startswith("ASKAI")]
+    other_tracks = [t for t in all_tracks if not t.upper().startswith("ASKAI")]
+
+    def build_section(tracks: List[str], is_askai: bool) -> pd.DataFrame:
+        rows = []
+        bucket_names = ["0-10s %", "10-20s %", "20-30s %", ">30s %"] if is_askai else ["0-2s %", "3-4s %", "4-6s %", ">6s %"]
+        for track in tracks:
+            for metric in ["Avg", "Min", "Max"]:
+                row = {"Track": track if metric == "Avg" else "", "Metric": metric}
+                for frames in run_frames:
+                    label = frames["Label"]
+                    values = metric_bucket_summary(frames["APIs"], track, metric, is_askai)
+                    for name, value in zip(bucket_names + ["Max Seconds"], values):
+                        row[f"{label} | {name}"] = value
+                rows.append(row)
+        return pd.DataFrame(rows)
+
+    return build_section(askai_tracks, True), build_section(other_tracks, False)
+
+
+def render_compare_tab(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
+    st.markdown('<div class="panel"><div class="panel-title">TRACK COMPARISON DASHBOARD <span class="tag">Same logic as Excel Track_Comparison</span></div>', unsafe_allow_html=True)
+
+    if len(run_frames) < 2:
+        st.info("Upload two or more JSON reports to see side-by-side comparison.")
+    else:
+        askai_df, other_df = build_dashboard_track_comparison(run_frames)
+
+        st.markdown("### AskAI Tracks")
+        if not askai_df.empty:
+            st.dataframe(askai_df, use_container_width=True, hide_index=True, height=360)
+        else:
+            st.info("No AskAI tracks found.")
+
+        st.markdown("### Assets / Assessments / Home / Settings / Support Tracks")
+        if not other_df.empty:
+            st.dataframe(other_df, use_container_width=True, hide_index=True, height=520)
+        else:
+            st.info("No non-AskAI tracks found.")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_trends_tab(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
+    st.markdown('<div class="panel"><div class="panel-title">TRENDS ACROSS RESULTS</div>', unsafe_allow_html=True)
+    rows = []
+    for frames in run_frames:
+        row = summarize_run(frames["APIs"])
+        row["Run"] = frames["Label"]
+        row["Region"] = frames.get("Region", region_from_frames(frames))
+        rows.append(row)
+    summary = pd.DataFrame(rows)
+    if len(summary) > 0:
+        c1, c2 = st.columns(2)
+        fig1 = px.line(summary, x="Run", y=["avg_sec", "p95_sec", "max_sec"], markers=True, title="Response Trend")
+        fig1.update_layout(height=420, xaxis_title="", yaxis_title="Seconds")
+        c1.plotly_chart(fig1, use_container_width=True)
+
+        fig2 = px.line(summary, x="Run", y=["error_rate", "sla_compliance"], markers=True, title="Error Rate / SLA Compliance Trend")
+        fig2.update_layout(height=420, xaxis_title="", yaxis_title="%")
+        c2.plotly_chart(fig2, use_container_width=True)
+
+        st.dataframe(summary, use_container_width=True, hide_index=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_drilldown_tab(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
+    df = combined_df(run_frames)
+    st.markdown('<div class="panel"><div class="panel-title">DRILLDOWN DATA</div>', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns(3)
+    tracks = sorted(df["Feature"].dropna().astype(str).unique().tolist())
+    selected_tracks = c1.multiselect("Track", tracks, default=tracks[: min(10, len(tracks))])
+    selected_status = c2.multiselect("SLA Status", ["PASS", "FAIL"], default=["PASS", "FAIL"])
+    sort_col = c3.selectbox("Sort by", ["Avg ResTime in sec", "95thPercentile Resp Time in Sec", "99thPercentile Resp Time in Sec", "MaxRes Time in sec", "errorCount", "sampleCount"])
+    filtered = df[df["Feature"].isin(selected_tracks) & df["SLA Status"].isin(selected_status)].sort_values(sort_col, ascending=False)
+    st.dataframe(filtered[standard_api_cols(filtered)], use_container_width=True, hide_index=True, height=650)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_reports_tab() -> None:
+    st.markdown('<div class="panel"><div class="panel-title">REPORTS</div>', unsafe_allow_html=True)
+    st.write("Download the generated Excel workbook from the upload page, or return to the upload page and generate a fresh report.")
+    if st.session_state.get("excel_bytes"):
+        st.download_button(
+            "Download Excel Report",
+            data=st.session_state.excel_bytes,
+            file_name=st.session_state.report_file_name,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def goto_tab_button(label: str, tab_name: str, key: str) -> None:
+    if st.button(label, key=key):
+        st.session_state.nav_tab = tab_name
+        st.rerun()
+
+
 def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
-    top_nav()
+    selected_tab = top_nav()
     main_col, side_col = st.columns([4.35, .95], gap="medium")
 
     with side_col:
@@ -587,7 +733,7 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
         st.markdown('<div class="side-card"><div class="panel-title">INSIGHTS</div>', unsafe_allow_html=True)
         for icon, color, text in insights:
             st.markdown(f'<div class="insight-item"><div class="dot" style="background:{color};">{icon}</div><div>{text}</div></div>', unsafe_allow_html=True)
-        st.markdown('<a class="mini-link">View all Insights →</a>', unsafe_allow_html=True)
+        goto_tab_button('View all Insights →', 'Trends', 'view_insights_btn')
         st.markdown("</div>", unsafe_allow_html=True)
 
         render_chatbot(selected_frames)
@@ -601,6 +747,25 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
 
     with main_col:
         df = combined_df(selected_frames)
+
+        if selected_tab == "Compare":
+            render_compare_tab(selected_frames)
+            return
+        if selected_tab == "Trends":
+            render_trends_tab(selected_frames)
+            return
+        if selected_tab == "Drilldown":
+            render_drilldown_tab(selected_frames)
+            return
+        if selected_tab == "Reports":
+            render_reports_tab()
+            return
+        if selected_tab == "Chatbot":
+            st.markdown('<div class="panel"><div class="panel-title">AI CHATBOT</div>', unsafe_allow_html=True)
+            render_chatbot(selected_frames)
+            st.markdown("</div>", unsafe_allow_html=True)
+            return
+
         st.markdown('<div class="panel"><div class="panel-title"><span>AGGREGATED PERFORMANCE OVERVIEW METRICS</span><span class="tag">Across Selected Results</span></div>', unsafe_allow_html=True)
         kpi_cards(df)
         st.markdown("</div>", unsafe_allow_html=True)
@@ -620,13 +785,13 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
                 fig.update_traces(texttemplate="%{text:.1f}s", textposition="outside")
                 fig.update_layout(height=300, margin=dict(l=8, r=10, t=5, b=88), xaxis_title="", yaxis_title="P95 (sec)", showlegend=False)
                 st.plotly_chart(fig, use_container_width=True)
-            st.markdown('<a class="mini-link">View all APIs →</a>', unsafe_allow_html=True)
+            goto_tab_button('View all APIs →', 'Drilldown', 'view_all_apis_btn')
             st.markdown("</div>", unsafe_allow_html=True)
 
         with c2:
             st.markdown('<div class="panel"><div class="panel-title">SLA Status</div>', unsafe_allow_html=True)
             st.plotly_chart(sla_donut(df), use_container_width=True)
-            st.markdown('<a class="mini-link">View SLA Breaches →</a>', unsafe_allow_html=True)
+            goto_tab_button('View SLA Breaches →', 'Drilldown', 'view_sla_breaches_btn')
             st.markdown("</div>", unsafe_allow_html=True)
 
         with c3:
@@ -639,7 +804,7 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.info("No API errors found.")
-            st.markdown('<a class="mini-link">View all Errors →</a>', unsafe_allow_html=True)
+            goto_tab_button('View all Errors →', 'Drilldown', 'view_all_errors_btn')
             st.markdown("</div>", unsafe_allow_html=True)
 
         c4, c5, c6 = st.columns([1.05, 1.0, .75], gap="medium")
@@ -722,7 +887,7 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
             st.dataframe(detail, use_container_width=True, hide_index=True, height=330)
         else:
             st.dataframe(tracks[["Feature","P95_Sec","Avg_Sec","Max_Sec","Errors","SLA Fail %"]].head(10), use_container_width=True, hide_index=True)
-        st.markdown('<div style="text-align:center;margin-top:5px;"><a class="mini-link">View all Tracks →</a></div>', unsafe_allow_html=True)
+        goto_tab_button('View all Tracks →', 'Compare', 'view_all_tracks_btn')
         st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -807,14 +972,14 @@ def chat_answer(question: str, run_frames: List[Dict[str, pd.DataFrame]]) -> Tup
     matched = match_rows(df, question)
     if not matched.empty:
         return f"I found {len(matched)} matching rows.", matched.sort_values(["SLA Breach Sec","Avg ResTime in sec","errorCount"], ascending=False)[standard_api_cols(matched)].head(n)
-    return "Ask me: top slow APIs, SLA breaches, top errors, worst tracks, P95/P99, samples, report context, compare runs, or keyword searches.", None
+    return "I can answer only from the uploaded JMeter performance report. Try asking about SLA breaches, top slow APIs, P95/P99, errors, tracks, regions, samples, report context, or comparisons between uploaded runs.", None
 
 
 def render_chatbot(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
     st.markdown('<div class="chat-card"><div class="chat-header">AI ASSISTANT</div>', unsafe_allow_html=True)
     st.write("Hi! I can help you analyze the performance data.")
     with st.expander("Try asking me", expanded=True):
-        st.write("- Top slow APIs in APJC\n- Why SLA failed?\n- Compare error rate by region\n- Worst performing tracks")
+        st.write("- Top slow APIs in APJC\n- Why SLA failed?\n- Compare error rate by region\n- Worst performing tracks\n- What changed between runs?\n- Which APIs have highest P99?\n- Show AskAI SLA breaches\n- Which track has most errors?")
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
