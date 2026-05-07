@@ -544,3 +544,10 @@ streamlit run app.py
 - Performance heatmap is larger for comparison mode.
 - Metrics compare APJC/EMEA/US when multiple region files are uploaded.
 - Excel `Insights` in comparison mode now aggregates all uploaded report files instead of showing only the latest report.
+
+
+## v50 Top Slow Tracks visibility
+
+- Expanded `Top Slow Tracks (P95)` table.
+- Added `Max Response Sec` along with `95th Perc Sec` and `Avg Sec`.
+- Added a full-width `TOP SLOW TRACKS DETAILS (P95 / AVG / MAX)` dashboard section so metrics are readable.

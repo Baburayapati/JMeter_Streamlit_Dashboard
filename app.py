@@ -68,6 +68,12 @@ if dashboard_only:
     box-shadow: 0 6px 18px rgba(0,0,0,0.045);
 }
 
+
+/* Make top slow track tables easier to read */
+[data-testid="stDataFrame"] {
+    font-size: 13px;
+}
+
 </style>
     """, unsafe_allow_html=True)
 
@@ -534,7 +540,21 @@ def render_tableau_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
 
         if not tracks.empty:
             st.markdown("##### Top Slow Tracks (P95)")
-            st.dataframe(tracks[["Feature", "P95_Sec", "Avg_Sec", "Errors", "SLA Fail %"]].head(8), use_container_width=True, hide_index=True)
+            top_slow_small = tracks[["Feature", "P95_Sec", "Avg_Sec", "Max_Sec", "Errors", "SLA Fail %"]].head(8).rename(
+                columns={
+                    "Feature": "Track",
+                    "P95_Sec": "95th Perc Sec",
+                    "Avg_Sec": "Avg Sec",
+                    "Max_Sec": "Max Response Sec",
+                    "SLA Fail %": "SLA Fail %",
+                }
+            )
+            st.dataframe(
+                top_slow_small,
+                use_container_width=True,
+                hide_index=True,
+                height=340,
+            )
         st.markdown("</div>", unsafe_allow_html=True)
 
     with mid:
@@ -618,6 +638,65 @@ def render_tableau_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
 
         st.markdown(f'<div class="insight-box">💡 {auto_insight(run_frames)}</div>', unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
+
+
+
+def render_top_slow_tracks_details(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
+    combined_parts = []
+    for frames in run_frames:
+        tmp = frames["APIs"].copy()
+        tmp["Run"] = frames["Label"]
+        tmp["Region"] = frames.get("Region", region_from_frames(frames))
+        combined_parts.append(tmp)
+
+    df = pd.concat(combined_parts, ignore_index=True) if combined_parts else pd.DataFrame()
+    if df.empty:
+        return
+
+    tracks = track_summary(df)
+    if tracks.empty:
+        return
+
+    top_slow = tracks[["Feature", "Track Type", "P95_Sec", "Avg_Sec", "Max_Sec", "Errors", "SLA Fail %", "APIs", "Samples"]].head(15).rename(
+        columns={
+            "Feature": "Track",
+            "Track Type": "Type",
+            "P95_Sec": "95th Perc Sec",
+            "Avg_Sec": "Avg Sec",
+            "Max_Sec": "Max Response Sec",
+            "SLA Fail %": "SLA Fail %",
+        }
+    )
+
+    st.markdown('<div class="panel"><div class="panel-title blue-title">TOP SLOW TRACKS DETAILS (P95 / AVG / MAX)</div>', unsafe_allow_html=True)
+
+    fig = px.bar(
+        top_slow.sort_values("95th Perc Sec"),
+        x="95th Perc Sec",
+        y="Track",
+        orientation="h",
+        color="Type",
+        text="95th Perc Sec",
+        title="Top Slow Tracks by 95th Percentile",
+    )
+    fig.update_traces(texttemplate="%{text:.2f}s", textposition="outside")
+    fig.update_layout(
+        height=520,
+        margin=dict(l=10, r=30, t=45, b=25),
+        xaxis_title="95th Percentile Response Time (sec)",
+        yaxis_title="",
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.dataframe(
+        top_slow,
+        use_container_width=True,
+        hide_index=True,
+        height=430,
+    )
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
 
 
 def render_drilldown(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
@@ -884,6 +963,7 @@ if dashboard_only:
         with main_col:
             selected_frames = get_dashboard_filtered_frames(st.session_state.run_frames)
             render_tableau_dashboard(selected_frames)
+            render_top_slow_tracks_details(selected_frames)
             render_region_comparison(selected_frames)
             render_drilldown(selected_frames)
 
