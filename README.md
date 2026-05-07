@@ -581,3 +581,14 @@ streamlit run app.py
   - Removed confusing fake tabs.
   - Added simple upload message.
 - Open Dashboard button now opens the dashboard route cleanly using the current app base URL.
+
+
+## v53 KPI rendering and action links fixed
+
+- KPI raw HTML issue fixed by using native Streamlit metric cards.
+- Main page now shows real action links after report generation:
+  - Executive Dashboard
+  - Excel Report
+  - AI Chatbot
+- Removed non-clickable static cards.
+- Removed the extra success/info text after generation.

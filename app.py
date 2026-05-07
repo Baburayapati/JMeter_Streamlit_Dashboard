@@ -315,6 +315,25 @@ st.markdown(
   .kpi-grid,.grid-3,.grid-2,.feature-grid {grid-template-columns:1fr;}
   .nav-tabs {display:none;}
 }
+
+/* Executive KPI metric styling */
+div[data-testid="stMetric"] {
+    background: #ffffff !important;
+    border: 1px solid #dbe4f0 !important;
+    border-radius: 14px !important;
+    padding: 16px 16px !important;
+    box-shadow: 0 8px 20px rgba(15,23,42,.055) !important;
+    min-height: 104px !important;
+}
+div[data-testid="stMetricLabel"] {
+    font-weight: 800 !important;
+    color: #111827 !important;
+}
+div[data-testid="stMetricValue"] {
+    font-weight: 850 !important;
+    color: #111827 !important;
+}
+
 </style>
 """,
     unsafe_allow_html=True,
@@ -466,31 +485,24 @@ def top_nav() -> None:
     )
 
 
+
 def kpi_cards(df: pd.DataFrame) -> None:
     s = summarize_run(df)
     sla_fail = round(100 - s["sla_compliance"], 2) if s["transactions"] else 0
-    cards = [
-        ("🛡", "Health Score", f"{s['performance_score']}", "/100", "#4f46e5", "Performance index"),
-        ("✓", "SLA Pass %", f"{s['sla_compliance']}%", "", "#16a34a", "APIs meeting SLA"),
-        ("×", "SLA Fail %", f"{sla_fail}%", "", "#dc2626", "APIs breaching SLA"),
-        ("▥", "Total APIs", f"{s['transactions']:,}", "", "#2563eb", "Compared transactions"),
-        ("◉", "Total Samples", f"{s['samples']:,}", "", "#7c3aed", "Executed samples"),
-        ("⚠", "Total Errors", f"{s['errors']:,}", "", "#ef4444", "Failed samples"),
+
+    cols = st.columns(6)
+    metrics = [
+        ("Health Score", f"{s['performance_score']}/100", "Performance index"),
+        ("SLA Pass %", f"{s['sla_compliance']}%", "APIs meeting SLA"),
+        ("SLA Fail %", f"{sla_fail}%", "APIs breaching SLA"),
+        ("Total APIs", f"{s['transactions']:,}", "Compared transactions"),
+        ("Total Samples", f"{s['samples']:,}", "Executed samples"),
+        ("Total Errors", f"{s['errors']:,}", "Failed samples"),
     ]
-    html = '<div class="kpi-grid">'
-    for icon, label, value, suffix, color, sub in cards:
-        html += f"""
-        <div class="kpi-card">
-          <div class="kpi-icon" style="background:{color};">{icon}</div>
-          <div>
-            <div class="kpi-label">{label}</div>
-            <div class="kpi-value">{value}<span style="font-size:12px;color:#667085;margin-left:4px;">{suffix}</span></div>
-            <div class="kpi-sub">{sub}</div>
-          </div>
-        </div>
-        """
-    html += "</div>"
-    st.markdown(html, unsafe_allow_html=True)
+
+    for col, (label, value, help_text) in zip(cols, metrics):
+        with col:
+            st.metric(label=label, value=value, help=help_text)
 
 
 def sla_donut(df: pd.DataFrame):
@@ -837,16 +849,93 @@ def render_main_page() -> None:
   <h3 style="margin-top:0;color:#0f2b68;">Upload performance report files</h3>
   <p style="color:#667085;font-size:13px;margin-top:-4px;">Upload one JMeter JSON file for a single dashboard. Upload two or more JMeter JSON files for comparison.</p>
 
-<div class="feature-grid">
-  <div class="feature"><h4>Executive Dashboard</h4><p>Opens after report generation in a new tab.</p></div>
-  <div class="feature"><h4>Excel Report</h4><p>Downloadable workbook with Insights, APIs, Errors, Transactions and Comparison.</p></div>
-  <div class="feature"><h4>AI Chatbot</h4><p>Available inside the dashboard to ask questions about the uploaded report.</p></div>
 </div>
 
 </div>
 """,
         unsafe_allow_html=True,
     )
+
+
+
+def dashboard_url_for_run(run_id_value: str) -> str:
+    return f"?view=dashboard&run_id={run_id_value}"
+
+
+def render_action_cards() -> None:
+    if not st.session_state.get("run_id"):
+        return
+
+    run_id_value = st.session_state.run_id
+
+    st.markdown(
+        """
+<style>
+.action-card-row {
+    display:grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin: 18px 0 14px 0;
+}
+.action-card {
+    background:#ffffff;
+    border:1px solid #dbe4f0;
+    border-radius:18px;
+    padding:18px;
+    min-height:150px;
+    box-shadow:0 10px 26px rgba(15,23,42,.06);
+}
+.action-card h3 {
+    margin:0 0 8px 0;
+    color:#0f2b68;
+    font-size:19px;
+}
+.action-card p {
+    margin:0 0 14px 0;
+    color:#667085;
+    font-size:13px;
+    line-height:1.45;
+}
+.action-link {
+    display:inline-block;
+    background:linear-gradient(90deg,#4f46e5,#2563eb);
+    color:white !important;
+    text-decoration:none !important;
+    padding:10px 14px;
+    border-radius:12px;
+    font-weight:800;
+    font-size:13px;
+    box-shadow:0 10px 22px rgba(37,99,235,.22);
+}
+.action-link.green {
+    background:linear-gradient(90deg,#137333,#0b8043);
+}
+.action-link.purple {
+    background:linear-gradient(90deg,#6d28d9,#7c3aed);
+}
+@media(max-width:900px){.action-card-row{grid-template-columns:1fr;}}
+</style>
+<div class="action-card-row">
+  <div class="action-card">
+    <h3>Executive Dashboard</h3>
+    <p>Open the leadership-ready dashboard with KPIs, region comparison, heatmaps and drilldowns.</p>
+    <a class="action-link" href="?view=dashboard&run_id=%s" target="_blank">Open Dashboard ↗</a>
+  </div>
+  <div class="action-card">
+    <h3>Excel Report</h3>
+    <p>Download the generated workbook with Insights, APIs, Transactions, Errors and Comparison sheets.</p>
+    <span style="color:#667085;font-size:13px;">Use the download button below.</span>
+  </div>
+  <div class="action-card">
+    <h3>AI Chatbot</h3>
+    <p>Ask report questions about SLA, errors, slow APIs, tracks, regions and comparisons.</p>
+    <a class="action-link purple" href="?view=dashboard&run_id=%s" target="_blank">Open Chatbot ↗</a>
+  </div>
+</div>
+""" % (run_id_value, run_id_value),
+        unsafe_allow_html=True,
+    )
+
 
 
 # Session state
@@ -899,28 +988,17 @@ else:
                 st.session_state.report_file_name = "JMeter_Report.xlsx"
                 st.session_state.messages = []
                 st.session_state.run_id = new_run_id
-                st.success("Executive dashboard and Excel report generated successfully.")
+                st.toast("Report generated successfully.", icon="✅")
             except Exception as exc:
                 st.error(f"Failed to generate report: {exc}")
 
     if st.session_state.excel_bytes:
-        c1, c2 = st.columns([1,1])
-        with c1:
-            st.download_button("Download Excel Report", data=st.session_state.excel_bytes, file_name=st.session_state.report_file_name, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        with c2:
-            url = f"?view=dashboard&run_id={st.session_state.run_id}"
-            components.html(
-                """
-                <div style="text-align:left;">
-                  <button onclick="
-                    const base = window.parent.location.origin + window.parent.location.pathname;
-                    const target = base + '?view=dashboard&run_id=%s';
-                    window.open(target, '_blank');
-                  " style="background:linear-gradient(90deg,#4f46e5,#2563eb);color:white;padding:10px 16px;border:0;border-radius:12px;font-weight:800;cursor:pointer;box-shadow:0 10px 22px rgba(37,99,235,.22);">
-                    Open Dashboard in New Tab ↗
-                  </button>
-                </div>
-                """ % st.session_state.run_id,
-                height=50,
-            )
-        st.info("Dashboard metrics are shown only in the new dashboard tab, not on this upload page.")
+        render_action_cards()
+        st.download_button(
+            "Download Excel Report",
+            data=st.session_state.excel_bytes,
+            file_name=st.session_state.report_file_name,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        
+        
