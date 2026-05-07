@@ -20,13 +20,55 @@ st.set_page_config(page_title=APP_TITLE, layout="wide")
 params = st.query_params
 dashboard_only = params.get("view", "") == "dashboard"
 
+run_id = params.get("run_id", "")
+
+@st.cache_resource
+def get_dashboard_store():
+    return {}
+
+dashboard_store = get_dashboard_store()
+
+
 
 if dashboard_only:
     st.markdown("""
     <style>
     section[data-testid="stSidebar"] {display:none;}
     .block-container {padding-top: 1rem;}
-    </style>
+    
+.kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 0;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 0.45rem;
+}
+.kpi-cell {
+    color: white;
+    padding: 9px 10px;
+    min-height: 58px;
+    font-weight: 800;
+    border-right: 1px solid rgba(255,255,255,0.25);
+}
+.kpi-label {
+    font-size: 13px;
+    line-height: 1.1;
+}
+.kpi-value {
+    font-size: 18px;
+    margin-top: 5px;
+    line-height: 1.1;
+}
+.chat-panel {
+    background: rgba(255,255,255,0.88);
+    border: 1px solid rgba(21,76,121,0.16);
+    border-radius: 11px;
+    padding: 0.65rem;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.045);
+}
+
+</style>
     """, unsafe_allow_html=True)
 
 st.markdown(
@@ -211,40 +253,44 @@ def sla_color_for_track(track_name: str, p95_value: float) -> float:
     return 1 if float(p95_value or 0) < threshold else 0
 
 
-def render_open_new_tab_button() -> None:
-    """Open current app in a new tab. If DASHBOARD_URL secret exists, open that URL."""
+
+def render_open_new_tab_button(run_id_value: str = "") -> None:
+    """Open dashboard metrics in a new tab. Only dashboard view is opened."""
     try:
         dashboard_url = st.secrets.get("DASHBOARD_URL", "")
     except Exception:
         dashboard_url = ""
 
-    if dashboard_url:
-        st.markdown(
-            f'<div style="text-align:center"><a class="open-link" href="{dashboard_url}" target="_blank">Open Dashboard in New Tab ↗</a></div>',
-            unsafe_allow_html=True,
-        )
+    if dashboard_url and run_id_value:
+        url_js = f"{dashboard_url}?view=dashboard&run_id={run_id_value}"
+    elif dashboard_url:
+        url_js = f"{dashboard_url}?view=dashboard"
+    elif run_id_value:
+        url_js = f"?view=dashboard&run_id={run_id_value}"
     else:
-        components.html(
-            """
-            <div style="text-align:center; margin: 0 0 10px 0;">
-              <button
-                onclick="window.open(window.parent.location.href + '?view=dashboard', '_blank')"
-                style="
-                  background: linear-gradient(90deg, #1565c0, #0b8043);
-                  color: white;
-                  padding: 8px 14px;
-                  border: 0;
-                  border-radius: 9px;
-                  font-weight: 700;
-                  font-size: 13px;
-                  box-shadow: 0 5px 16px rgba(21,101,192,0.22);
-                  cursor: pointer;">
-                Open Dashboard in New Tab ↗
-              </button>
-            </div>
-            """,
-            height=44,
-        )
+        url_js = "?view=dashboard"
+
+    components.html(
+        f"""
+        <div style="text-align:center; margin: 0 0 10px 0;">
+          <button
+            onclick="window.open('{url_js}', '_blank')"
+            style="
+              background: linear-gradient(90deg, #1565c0, #0b8043);
+              color: white;
+              padding: 8px 14px;
+              border: 0;
+              border-radius: 9px;
+              font-weight: 700;
+              font-size: 13px;
+              box-shadow: 0 5px 16px rgba(21,101,192,0.22);
+              cursor: pointer;">
+            Open Dashboard in New Tab ↗
+          </button>
+        </div>
+        """,
+        height=44,
+    )
 
 
 def render_region_comparison(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
@@ -355,15 +401,25 @@ def render_region_comparison(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
 
+
 def render_kpis(df: pd.DataFrame) -> None:
     s = summarize_run(df)
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("Avg Response", f'{s["avg_sec"]}s')
-    c2.metric("Success Rate", f'{s["success_rate"]}%')
-    c3.metric("Error Rate", f'{s["error_rate"]}%')
-    c4.metric("Transactions", s["transactions"])
-    c5.metric("Perf. Score", f'{s["performance_score"]}/100')
-    c6.metric("SLA Compliance", f'{s["sla_compliance"]}%')
+    total_apis = int(len(df))
+    total_samples = int(pd.to_numeric(df.get("sampleCount", 0), errors="coerce").fillna(0).sum()) if not df.empty else 0
+    total_errors = int(pd.to_numeric(df.get("errorCount", 0), errors="coerce").fillna(0).sum()) if not df.empty else 0
+    sla_pass = s["sla_compliance"]
+    sla_fail = round(100 - sla_pass, 2) if total_apis else 0
+    html = f"""
+    <div class="kpi-strip">
+      <div class="kpi-cell" style="background:#153B50;"><div class="kpi-label">Health Score</div><div class="kpi-value">{s['performance_score']}</div></div>
+      <div class="kpi-cell" style="background:#1E7D4E;"><div class="kpi-label">SLA Pass %</div><div class="kpi-value">{sla_pass}</div></div>
+      <div class="kpi-cell" style="background:#A61B1B;"><div class="kpi-label">SLA Fail %</div><div class="kpi-value">{sla_fail}</div></div>
+      <div class="kpi-cell" style="background:#31588A;"><div class="kpi-label">Total APIs</div><div class="kpi-value">{total_apis}</div></div>
+      <div class="kpi-cell" style="background:#6A4C93;"><div class="kpi-label">Total Samples</div><div class="kpi-value">{total_samples}</div></div>
+      <div class="kpi-cell" style="background:#9A3412;"><div class="kpi-label">Total Errors</div><div class="kpi-value">{total_errors}</div></div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def plot_sla_donut(df: pd.DataFrame):
@@ -398,7 +454,7 @@ def render_tableau_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
     latest = run_frames[-1]
     df = latest["APIs"].copy()
 
-    st.markdown('<div class="panel"><div class="panel-title green-title">INSIGHTS</div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel"><div class="panel-title green-title">AGGREGATED PERFORMANCE OVERVIEW METRICS</div>', unsafe_allow_html=True)
     render_kpis(df)
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -491,7 +547,7 @@ def render_tableau_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
         st.markdown("</div>", unsafe_allow_html=True)
 
     with right:
-        st.markdown('<div class="panel"><div class="panel-title teal-title">DEGRADATION / INSIGHTS</div>', unsafe_allow_html=True)
+        st.markdown('<div class="panel"><div class="panel-title teal-title">DEGRADATION / AGGREGATED PERFORMANCE OVERVIEW METRICS</div>', unsafe_allow_html=True)
         tracks = track_summary(df)
         if len(run_frames) > 1:
             summary_rows = []
@@ -660,7 +716,6 @@ def chat_answer(question: str, run_frames: List[Dict[str, pd.DataFrame]]) -> Tup
 st.markdown(f"<div class='dashboard-title'>{APP_TITLE}</div>", unsafe_allow_html=True)
 st.markdown("<div class='dashboard-subtitle'>Upload one JMeter <code>statistics.json</code> file for a normal dashboard. Upload two or more files for comparison.</div>", unsafe_allow_html=True)
 
-render_open_new_tab_button()
 
 st.markdown(
     """
@@ -690,10 +745,11 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-if not dashboard_only:
-    uploaded_files = st.file_uploader("Upload statistics.json file(s)", type=["json"], accept_multiple_files=True)
-else:
+
+if dashboard_only:
     uploaded_files = []
+else:
+    uploaded_files = st.file_uploader("Upload statistics.json file(s)", type=["json"], accept_multiple_files=True)
 
 if "excel_bytes" not in st.session_state:
     st.session_state.excel_bytes = None
@@ -703,79 +759,109 @@ if "report_file_name" not in st.session_state:
     st.session_state.report_file_name = "JMeter_Report.xlsx"
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "run_id" not in st.session_state:
+    st.session_state.run_id = ""
 
-generate_clicked = st.button("Generate Tableau Dashboard + Excel Report", type="primary", disabled=not uploaded_files)
+# Load dashboard data from generated report when opened in new tab.
+if dashboard_only and run_id and run_id in dashboard_store:
+    st.session_state.run_frames = dashboard_store[run_id]["run_frames"]
+    st.session_state.excel_bytes = dashboard_store[run_id].get("excel_bytes")
+    st.session_state.report_file_name = dashboard_store[run_id].get("report_file_name", "JMeter_Report.xlsx")
 
-if uploaded_files and generate_clicked:
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
-        json_paths: List[Path] = []
-        labels: List[str] = []
-        run_frames: List[Dict[str, pd.DataFrame]] = []
+if not dashboard_only:
+    generate_clicked = st.button("Generate Tableau Dashboard + Excel Report", type="primary", disabled=not uploaded_files)
 
-        for idx, uploaded_file in enumerate(uploaded_files, start=1):
-            clean_name = uploaded_file.name.replace(" ", "_")
-            path = tmpdir / f"{idx}_{clean_name}"
-            path.write_bytes(uploaded_file.getvalue())
-            json_paths.append(path)
-            label = Path(uploaded_file.name).stem
-            labels.append(label)
-            run_frames.append(process_uploaded_file(path, label))
+    if uploaded_files and generate_clicked:
+        import uuid
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            json_paths: List[Path] = []
+            labels: List[str] = []
+            run_frames: List[Dict[str, pd.DataFrame]] = []
 
-        output_path = tmpdir / "JMeter_Report.xlsx"
+            for idx, uploaded_file in enumerate(uploaded_files, start=1):
+                clean_name = uploaded_file.name.replace(" ", "_")
+                path = tmpdir / f"{idx}_{clean_name}"
+                path.write_bytes(uploaded_file.getvalue())
+                json_paths.append(path)
+                label = Path(uploaded_file.name).stem
+                labels.append(label)
+                run_frames.append(process_uploaded_file(path, label))
 
-        try:
-            if len(json_paths) == 1:
-                build_report(json_paths[0], output_path)
-                st.success("Single Tableau dashboard and Excel report generated successfully.")
-            else:
-                build_comparison_report(json_paths, labels, output_path)
-                st.success("Comparison Tableau dashboard and Excel report generated successfully.")
+            output_path = tmpdir / "JMeter_Report.xlsx"
 
-            run_frames = add_region_to_frames(run_frames)
-            st.session_state.excel_bytes = output_path.read_bytes()
-            st.session_state.run_frames = run_frames
-            st.session_state.report_file_name = "JMeter_Report.xlsx"
-            st.session_state.messages = []
-        except Exception as exc:
-            st.error(f"Failed to generate report: {exc}")
+            try:
+                if len(json_paths) == 1:
+                    build_report(json_paths[0], output_path)
+                    st.success("Report generated successfully.")
+                else:
+                    build_comparison_report(json_paths, labels, output_path)
+                    st.success("Comparison report generated successfully.")
 
-if st.session_state.excel_bytes:
-    st.download_button(
-        label="Download Excel Report",
-        data=st.session_state.excel_bytes,
-        file_name=st.session_state.report_file_name,
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+                run_frames = add_region_to_frames(run_frames)
+                excel_bytes = output_path.read_bytes()
+                new_run_id = uuid.uuid4().hex
+                dashboard_store[new_run_id] = {
+                    "run_frames": run_frames,
+                    "excel_bytes": excel_bytes,
+                    "report_file_name": "JMeter_Report.xlsx",
+                }
 
-if st.session_state.run_frames:
-    render_tableau_dashboard(st.session_state.run_frames)
-    render_region_comparison(st.session_state.run_frames)
-    render_drilldown(st.session_state.run_frames)
+                st.session_state.excel_bytes = excel_bytes
+                st.session_state.run_frames = run_frames
+                st.session_state.report_file_name = "JMeter_Report.xlsx"
+                st.session_state.messages = []
+                st.session_state.run_id = new_run_id
+            except Exception as exc:
+                st.error(f"Failed to generate report: {exc}")
 
-    st.divider()
-    st.subheader("🤖 Performance Chatbot")
-    with st.expander("Example questions", expanded=False):
-        st.write(
-            "- What are the top slow APIs?\n"
-            "- Which APIs are breaching SLA?\n"
-            "- Show top error APIs\n"
-            "- Which tracks are worst?\n"
-            "- Give overall health summary\n"
-            "- Compare runs\n"
-            "- Show regression\n"
-            "- What is the report date and duration?"
+    if st.session_state.excel_bytes:
+        st.download_button(
+            label="Download Excel Report",
+            data=st.session_state.excel_bytes,
+            file_name=st.session_state.report_file_name,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+        render_open_new_tab_button(st.session_state.run_id)
 
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-            if msg.get("table") is not None:
-                st.dataframe(msg["table"], use_container_width=True, hide_index=True)
+    if st.session_state.run_frames:
+        st.info("Dashboard is ready. Click **Open Dashboard in New Tab ↗** to view the metrics dashboard.")
 
-    question = st.chat_input("Ask about SLA, slow APIs, errors, tracks, context, or comparison...")
-    if question:
-        st.session_state.messages.append({"role": "user", "content": question, "table": None})
-        answer, table = chat_answer(question, st.session_state.run_frames)
-        st.session_state.messages.append({"role": "assistant", "content": answer, "table": table})
-        st.rerun()
+if dashboard_only:
+    if st.session_state.run_frames:
+        main_col, chat_col = st.columns([3.2, 1.05])
+        with main_col:
+            render_tableau_dashboard(st.session_state.run_frames)
+            render_region_comparison(st.session_state.run_frames)
+            render_drilldown(st.session_state.run_frames)
+
+        with chat_col:
+            st.markdown('<div class="chat-panel">', unsafe_allow_html=True)
+            st.subheader("🤖 Chatbot")
+            with st.expander("Example questions", expanded=False):
+                st.write(
+                    "- What are the top slow APIs?\n"
+                    "- Which APIs are breaching SLA?\n"
+                    "- Show top error APIs\n"
+                    "- Which tracks are worst?\n"
+                    "- Give overall health summary\n"
+                    "- Compare runs\n"
+                    "- Show regression\n"
+                    "- What is the report date and duration?"
+                )
+
+            for msg in st.session_state.messages:
+                with st.chat_message(msg["role"]):
+                    st.markdown(msg["content"])
+                    if msg.get("table") is not None:
+                        st.dataframe(msg["table"], use_container_width=True, hide_index=True)
+
+            question = st.chat_input("Ask report question...")
+            if question:
+                st.session_state.messages.append({"role": "user", "content": question, "table": None})
+                answer, table = chat_answer(question, st.session_state.run_frames)
+                st.session_state.messages.append({"role": "assistant", "content": answer, "table": table})
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        st.warning("No dashboard data found for this tab. Please generate the report from the main page and click Open Dashboard in New Tab again.")

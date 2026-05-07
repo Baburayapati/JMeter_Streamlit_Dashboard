@@ -514,3 +514,21 @@ streamlit run app.py
 - Added an `Open Dashboard in New Tab` button in the UI.
   - If `DASHBOARD_URL` is configured in Streamlit secrets, it opens that URL.
   - Otherwise, it opens the current app URL in a new browser tab.
+
+
+## v48 Dashboard-only view, Insights KPIs, Chatbot on right
+
+- Main upload page no longer shows the dashboard metrics.
+- After report generation, main page shows:
+  - Download Excel Report
+  - Open Dashboard in New Tab ↗
+- New-tab dashboard opens with `?view=dashboard&run_id=<id>`.
+- Dashboard KPI strip now matches Insights Excel metrics:
+  - Health Score
+  - SLA Pass %
+  - SLA Fail %
+  - Total APIs
+  - Total Samples
+  - Total Errors
+- Dashboard section title changed to `AGGREGATED PERFORMANCE OVERVIEW METRICS`.
+- Chatbot is shown on the right side of the dashboard view.
