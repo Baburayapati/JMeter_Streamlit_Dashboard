@@ -35,6 +35,33 @@ st.markdown("""
     font-weight: 700 !important;
     height: 48px !important;
 }
+
+/* v59 main page exact polish */
+.hero-title-box {
+    display: table;
+    margin: 18px auto 10px auto;
+    width: auto;
+    max-width: fit-content;
+    background: linear-gradient(135deg,#07132f 0%, #102a63 55%, #2d2b7f 100%);
+    color: white;
+    border-radius: 18px;
+    padding: 18px 28px;
+    box-shadow: 0 16px 34px rgba(7,19,47,.18);
+}
+.hero-title-box h1 {
+    margin: 0;
+    font-size: 24px;
+    line-height: 1.18;
+    font-weight: 850;
+    white-space: nowrap;
+}
+.hero-subtitle {
+    text-align: center;
+    color: #334155;
+    font-size: 15px;
+    margin: 0 auto 18px auto;
+    max-width: 980px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1030,12 +1057,15 @@ def render_chatbot(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
 
 
 
+
 def render_main_page() -> None:
     st.markdown(
         f"""
-<div class="hero upload-card">
+<div class="hero-title-box">
   <h1>{APP_TITLE}</h1>
-  <p>Upload one JMeter statistics.json file for a normal dashboard report. Upload two or more files for comparison.</p>
+</div>
+<div class="hero-subtitle">
+  Upload one JMeter statistics.json file for a normal dashboard report. Upload two or more files for comparison.
 </div>
 """,
         unsafe_allow_html=True,
@@ -1045,6 +1075,7 @@ def render_main_page() -> None:
 
 def dashboard_url_for_run(run_id_value: str) -> str:
     return f"?view=dashboard&run_id={run_id_value}"
+
 
 
 
@@ -1060,7 +1091,7 @@ def render_action_cards() -> None:
 .action-card-box {
     background:#ffffff;
     border:1px solid #dbe4f0;
-    border-radius:16px;
+    border-radius:18px;
     padding:18px;
     min-height:190px;
     box-shadow:0 10px 26px rgba(15,23,42,.06);
@@ -1127,7 +1158,6 @@ def render_action_cards() -> None:
             unsafe_allow_html=True,
         )
         if has_report:
-            st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
             st.download_button(
                 "⬇ Download Excel Report",
                 data=st.session_state.excel_bytes,
@@ -1137,8 +1167,7 @@ def render_action_cards() -> None:
                 use_container_width=True,
             )
         else:
-            st.button("⬇ Download Excel Report", disabled=True, use_container_width=True, key="excel_disabled_btn")
-            
+            st.button("⬇ Download Excel Report", disabled=True, use_container_width=True, key="excel_download_disabled_inside_card")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with c3:
