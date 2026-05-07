@@ -1080,6 +1080,7 @@ def dashboard_url_for_run(run_id_value: str) -> str:
 
 
 
+
 def render_action_cards() -> None:
     has_report = bool(st.session_state.get("run_id") and st.session_state.get("excel_bytes"))
     run_id_value = st.session_state.get("run_id", "")
@@ -1088,25 +1089,18 @@ def render_action_cards() -> None:
     st.markdown(
         """
 <style>
-.action-card-box {
-    background:#ffffff;
-    border:1px solid #dbe4f0;
-    border-radius:18px;
-    padding:18px;
-    min-height:190px;
-    box-shadow:0 10px 26px rgba(15,23,42,.06);
-    margin-bottom: 8px;
-}
-.action-card-box h3 {
+.action-card-title {
     margin:0 0 8px 0;
     color:#0f2b68;
     font-size:19px;
+    font-weight:800;
 }
-.action-card-box p {
-    margin:0 0 14px 0;
+.action-card-text {
+    margin:0 0 16px 0;
     color:#667085;
     font-size:13px;
     line-height:1.45;
+    min-height:58px;
 }
 .action-link {
     display:inline-block;
@@ -1136,52 +1130,34 @@ def render_action_cards() -> None:
     c1, c2, c3 = st.columns(3)
 
     with c1:
-        link_class = "action-link" if has_report else "action-link disabled"
-        st.markdown(
-            f"""
-<div class="action-card-box">
-  <h3>Executive Dashboard</h3>
-  <p>Open the leadership-ready dashboard with KPIs, region comparison, heatmaps and drilldowns.</p>
-  <a class="{link_class}" href="{dashboard_href}" target="_blank">Open Dashboard ↗</a>
-</div>
-""",
-            unsafe_allow_html=True,
-        )
+        with st.container(border=True):
+            st.markdown('<div class="action-card-title">Executive Dashboard</div>', unsafe_allow_html=True)
+            st.markdown('<div class="action-card-text">Open the leadership-ready dashboard with KPIs, region comparison, heatmaps and drilldowns.</div>', unsafe_allow_html=True)
+            link_class = "action-link" if has_report else "action-link disabled"
+            st.markdown(f'<a class="{link_class}" href="{dashboard_href}" target="_blank">Open Dashboard ↗</a>', unsafe_allow_html=True)
 
     with c2:
-        st.markdown(
-            """
-<div class="action-card-box">
-  <h3>Excel Report</h3>
-  <p>Download the generated workbook with Insights, APIs, Transactions, Errors and Comparison sheets.</p>
-""",
-            unsafe_allow_html=True,
-        )
-        if has_report:
-            st.download_button(
-                "⬇ Download Excel Report",
-                data=st.session_state.excel_bytes,
-                file_name=st.session_state.report_file_name,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="excel_download_inside_card",
-                use_container_width=True,
-            )
-        else:
-            st.button("⬇ Download Excel Report", disabled=True, use_container_width=True, key="excel_download_disabled_inside_card")
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown('<div class="action-card-title">Excel Report</div>', unsafe_allow_html=True)
+            st.markdown('<div class="action-card-text">Download the generated workbook with Insights, APIs, Transactions, Errors and Comparison sheets.</div>', unsafe_allow_html=True)
+            if has_report:
+                st.download_button(
+                    "⬇ Download Excel Report",
+                    data=st.session_state.excel_bytes,
+                    file_name=st.session_state.report_file_name,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="excel_download_inside_card",
+                    use_container_width=True,
+                )
+            else:
+                st.button("⬇ Download Excel Report", disabled=True, use_container_width=True, key="excel_download_disabled_inside_card")
 
     with c3:
-        link_class = "action-link purple" if has_report else "action-link disabled"
-        st.markdown(
-            f"""
-<div class="action-card-box">
-  <h3>AI Chatbot</h3>
-  <p>Open the dashboard chatbot and ask questions about SLA, slow APIs, errors, regions and comparisons.</p>
-  <a class="{link_class}" href="{dashboard_href}" target="_blank">Open Chatbot ↗</a>
-</div>
-""",
-            unsafe_allow_html=True,
-        )
+        with st.container(border=True):
+            st.markdown('<div class="action-card-title">AI Chatbot</div>', unsafe_allow_html=True)
+            st.markdown('<div class="action-card-text">Open the dashboard chatbot and ask questions about SLA, slow APIs, errors, regions and comparisons.</div>', unsafe_allow_html=True)
+            link_class = "action-link purple" if has_report else "action-link disabled"
+            st.markdown(f'<a class="{link_class}" href="{dashboard_href}" target="_blank">Open Chatbot ↗</a>', unsafe_allow_html=True)
 
 
 
