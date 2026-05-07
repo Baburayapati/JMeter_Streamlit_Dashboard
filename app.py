@@ -18,6 +18,26 @@ from main import build_report, build_comparison_report, build_single_report_fram
 
 APP_TITLE = "CiscoIQ-SaaS-Support-Services Performance Dashboard"
 
+
+st.markdown("""
+<style>
+.stFileUploader {
+    background: white;
+    border-radius: 18px;
+    padding: 14px;
+    border: 1px solid #dbe4f0;
+    box-shadow: 0 8px 24px rgba(15,23,42,.05);
+}
+.stButton>button[kind="primary"] {
+    background: linear-gradient(90deg,#2563eb,#7c3aed) !important;
+    border: none !important;
+    border-radius: 12px !important;
+    font-weight: 700 !important;
+    height: 48px !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 st.set_page_config(page_title=APP_TITLE, layout="wide")
 
 params = st.query_params
@@ -72,13 +92,13 @@ st.markdown(
     linear-gradient(135deg,#07132f 0%, #0a1b3f 50%, #0f2b68 100%);
   color:white;
   border-radius: 18px;
-  padding: 18px 24px;
+  padding: 12px 22px;
   box-shadow: 0 14px 32px rgba(7,19,47,.18);
   margin-bottom: 18px;
 }
 .hero h1 {
   margin: 0;
-  font-size: 24px;
+  font-size: 20px;
   line-height: 1.15;
   font-weight: 850;
   letter-spacing:-.4px;
@@ -292,7 +312,7 @@ st.markdown(
 .main-page-card {
   background:white;
   border:1px solid var(--border);
-  border-radius:18px;
+  border-radius:16px;
   padding:22px;
   box-shadow: 0 12px 30px rgba(15,23,42,.06);
   margin-bottom:16px;
@@ -666,12 +686,15 @@ def render_compare_tab(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
         if not askai_df.empty:
             st.dataframe(askai_df, use_container_width=True, hide_index=True, height=360)
         else:
+            st.button("⬇ Download Excel Report", disabled=True, use_container_width=True, key="excel_disabled_btn")
+            st.button("⬇ Download Excel Report", disabled=True, use_container_width=True, key="excel_disabled_btn")
             st.info("No AskAI tracks found.")
 
         st.markdown("### Assets / Assessments / Home / Settings / Support Tracks — 0-2s / 3-4s / 4-6s / >6s")
         if not other_df.empty:
             st.dataframe(other_df, use_container_width=True, hide_index=True, height=520)
         else:
+            st.button("⬇ Download Excel Report", disabled=True, use_container_width=True, key="excel_disabled_btn")
             st.info("No non-AskAI tracks found.")
 
     st.markdown("</div>", unsafe_allow_html=True)
@@ -897,6 +920,7 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
             detail = pd.DataFrame(table_rows)
             st.dataframe(detail, use_container_width=True, hide_index=True, height=330)
         else:
+            st.button("⬇ Download Excel Report", disabled=True, use_container_width=True, key="excel_disabled_btn")
             st.dataframe(tracks[["Feature","P95_Sec","Avg_Sec","Max_Sec","Errors","SLA Fail %"]].head(10), use_container_width=True, hide_index=True)
         goto_tab_button('View all Tracks →', 'Compare', 'view_all_tracks_btn')
         st.markdown("</div>", unsafe_allow_html=True)
@@ -1036,7 +1060,7 @@ def render_action_cards() -> None:
 .action-card-box {
     background:#ffffff;
     border:1px solid #dbe4f0;
-    border-radius:18px;
+    border-radius:16px;
     padding:18px;
     min-height:190px;
     box-shadow:0 10px 26px rgba(15,23,42,.06);
@@ -1103,15 +1127,18 @@ def render_action_cards() -> None:
             unsafe_allow_html=True,
         )
         if has_report:
+            st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
             st.download_button(
-                "Download Excel Report",
+                "⬇ Download Excel Report",
                 data=st.session_state.excel_bytes,
                 file_name=st.session_state.report_file_name,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="excel_download_inside_card",
+                use_container_width=True,
             )
         else:
-            st.button("Download Excel Report", disabled=True, key="excel_download_disabled_inside_card")
+            st.button("⬇ Download Excel Report", disabled=True, use_container_width=True, key="excel_disabled_btn")
+            
         st.markdown("</div>", unsafe_allow_html=True)
 
     with c3:
@@ -1148,8 +1175,8 @@ if dashboard_only:
         st.warning("No dashboard data found for this tab. Please generate the report from the main page and click Open Dashboard in New Tab again.")
 else:
     render_main_page()
-    uploaded_files = st.file_uploader("Upload statistics.json file(s)", type=["json"], accept_multiple_files=True)
-    generate_clicked = st.button("Generate Report", type="primary", disabled=not uploaded_files)
+    uploaded_files = st.file_uploader("Upload JMeter statistics.json file(s)", type=["json"], accept_multiple_files=True)
+    generate_clicked = st.button("Generate Results", type="primary", disabled=not uploaded_files)
     if uploaded_files and generate_clicked:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
