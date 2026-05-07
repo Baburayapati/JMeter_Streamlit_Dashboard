@@ -824,10 +824,8 @@ def render_main_page() -> None:
   <h1>{APP_TITLE}</h1>
   <p>Upload JMeter statistics JSON files and generate an executive-ready performance dashboard for US, EMEA, and APJC.</p>
   <div class="hero-actions">
-    <span class="primary-pill">Executive Dashboard</span>
-    <span class="secondary-pill">Excel Report</span>
-    <span class="secondary-pill">AI Chatbot</span>
-    <span class="secondary-pill">Region Comparison</span>
+    <span class="primary-pill">Upload JSON → Generate Report → Open Dashboard</span>
+    <span class="secondary-pill">Excel + Dashboard + Chatbot Included</span>
   </div>
 </div>
 """,
@@ -837,7 +835,14 @@ def render_main_page() -> None:
         """
 <div class="main-page-card upload-card">
   <h3 style="margin-top:0;color:#0f2b68;">Upload performance report files</h3>
-  <p style="color:#667085;font-size:13px;margin-top:-4px;">Use filenames containing region and run details, for example <code>..._APJC_1Hour_April-19-2026_Report.json</code>.</p>
+  <p style="color:#667085;font-size:13px;margin-top:-4px;">Upload one JMeter JSON file for a single dashboard. Upload two or more JMeter JSON files for comparison.</p>
+
+<div class="feature-grid">
+  <div class="feature"><h4>Executive Dashboard</h4><p>Opens after report generation in a new tab.</p></div>
+  <div class="feature"><h4>Excel Report</h4><p>Downloadable workbook with Insights, APIs, Errors, Transactions and Comparison.</p></div>
+  <div class="feature"><h4>AI Chatbot</h4><p>Available inside the dashboard to ask questions about the uploaded report.</p></div>
+</div>
+
 </div>
 """,
         unsafe_allow_html=True,
@@ -905,13 +910,17 @@ else:
         with c2:
             url = f"?view=dashboard&run_id={st.session_state.run_id}"
             components.html(
-                f"""
+                """
                 <div style="text-align:left;">
-                  <button onclick="window.open('{url}', '_blank')" style="background:linear-gradient(90deg,#4f46e5,#2563eb);color:white;padding:10px 16px;border:0;border-radius:12px;font-weight:800;cursor:pointer;box-shadow:0 10px 22px rgba(37,99,235,.22);">
+                  <button onclick="
+                    const base = window.parent.location.origin + window.parent.location.pathname;
+                    const target = base + '?view=dashboard&run_id=%s';
+                    window.open(target, '_blank');
+                  " style="background:linear-gradient(90deg,#4f46e5,#2563eb);color:white;padding:10px 16px;border:0;border-radius:12px;font-weight:800;cursor:pointer;box-shadow:0 10px 22px rgba(37,99,235,.22);">
                     Open Dashboard in New Tab ↗
                   </button>
                 </div>
-                """,
+                """ % st.session_state.run_id,
                 height=50,
             )
         st.info("Dashboard metrics are shown only in the new dashboard tab, not on this upload page.")

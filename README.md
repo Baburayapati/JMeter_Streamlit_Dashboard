@@ -572,3 +572,12 @@ streamlit run app.py
 - Improved chart spacing and dashboard layout.
 - Added region comparison table/heatmap.
 - Added readable Top Slow Tracks Details table with P95 / Avg / Max.
+
+
+## v52 Fix dashboard rendering and main page
+
+- Fixed raw KPI HTML showing in dashboard by rendering KPI cards as HTML.
+- Main page simplified:
+  - Removed confusing fake tabs.
+  - Added simple upload message.
+- Open Dashboard button now opens the dashboard route cleanly using the current app base URL.
