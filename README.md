@@ -532,3 +532,15 @@ streamlit run app.py
   - Total Errors
 - Dashboard section title changed to `AGGREGATED PERFORMANCE OVERVIEW METRICS`.
 - Chatbot is shown on the right side of the dashboard view.
+
+
+## v49 Region dropdowns + comparison Insights
+
+- Dashboard-only view now has three dropdown filters:
+  - Result Files
+  - Date
+  - Region
+- Dashboard charts/metrics use the selected files/date/region filters.
+- Performance heatmap is larger for comparison mode.
+- Metrics compare APJC/EMEA/US when multiple region files are uploaded.
+- Excel `Insights` in comparison mode now aggregates all uploaded report files instead of showing only the latest report.

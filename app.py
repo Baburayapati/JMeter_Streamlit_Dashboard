@@ -450,23 +450,68 @@ def auto_insight(run_frames: List[Dict[str, pd.DataFrame]]) -> str:
     return f"SLA compliance is {s['sla_compliance']}% and average response time is {s['avg_sec']}s."
 
 
+
+def get_dashboard_filtered_frames(run_frames: List[Dict[str, pd.DataFrame]]):
+    rows = []
+    for frames in run_frames:
+        info = frames.get("Run_Info")
+        info_row = info.iloc[0].to_dict() if info is not None and not info.empty else {}
+        rows.append({
+            "Label": frames["Label"],
+            "Region": frames.get("Region", region_from_frames(frames)),
+            "Date": str(info_row.get("Date", "N/A")),
+            "Duration": str(info_row.get("Duration", "N/A")),
+        })
+    meta = pd.DataFrame(rows)
+    st.markdown('<div class="panel"><div class="panel-title teal-title">DASHBOARD FILTERS</div>', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns(3)
+    files = meta["Label"].tolist()
+    dates = sorted(meta["Date"].dropna().astype(str).unique().tolist())
+    regions = sorted(meta["Region"].dropna().astype(str).unique().tolist())
+
+    selected_files = c1.multiselect("Result Files", files, default=files)
+    selected_dates = c2.multiselect("Date", dates, default=dates)
+    selected_regions = c3.multiselect("Region", regions, default=regions)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    keep = meta[
+        meta["Label"].isin(selected_files)
+        & meta["Date"].isin(selected_dates)
+        & meta["Region"].isin(selected_regions)
+    ]["Label"].tolist()
+    return [frames for frames in run_frames if frames["Label"] in keep] or run_frames
+
+
+
 def render_tableau_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
-    latest = run_frames[-1]
-    df = latest["APIs"].copy()
+    combined_parts = []
+    for frames in run_frames:
+        tmp = frames["APIs"].copy()
+        tmp["Run"] = frames["Label"]
+        tmp["Region"] = frames.get("Region", region_from_frames(frames))
+        combined_parts.append(tmp)
+    df = pd.concat(combined_parts, ignore_index=True) if combined_parts else pd.DataFrame()
 
     st.markdown('<div class="panel"><div class="panel-title green-title">AGGREGATED PERFORMANCE OVERVIEW METRICS</div>', unsafe_allow_html=True)
     render_kpis(df)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    left, mid, right = st.columns([1.05, 1.05, 1.15])
+    left, mid, right = st.columns([1.05, 1.15, 1.15])
 
     with left:
-        st.markdown('<div class="panel"><div class="panel-title blue-title">WITHIN RUN COMPARISON</div>', unsafe_allow_html=True)
+        st.markdown('<div class="panel"><div class="panel-title blue-title">WITHIN / SELECTED RESULTS COMPARISON</div>', unsafe_allow_html=True)
         tracks = track_summary(df)
         if not tracks.empty:
-            fig_p95 = px.bar(tracks.head(8).sort_values("P95_Sec"), x="Feature", y="P95_Sec", title="Response Time (P95)", text="P95_Sec")
+            fig_p95 = px.bar(
+                tracks.head(10).sort_values("P95_Sec"),
+                x="Feature",
+                y="P95_Sec",
+                title="Response Time (P95)",
+                text="P95_Sec",
+                color="Feature",
+            )
             fig_p95.update_traces(texttemplate="%{text:.1f}s", textposition="outside")
-            fig_p95.update_layout(height=260, margin=dict(l=10, r=10, t=40, b=50), xaxis_title="", yaxis_title="P95 sec")
+            fig_p95.update_layout(height=360, margin=dict(l=10, r=10, t=45, b=115), xaxis_title="", yaxis_title="P95 sec", showlegend=False)
             st.plotly_chart(fig_p95, use_container_width=True)
 
         c1, c2 = st.columns(2)
@@ -474,96 +519,102 @@ def render_tableau_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
 
         top_errors = df[pd.to_numeric(df.get("errorCount", 0), errors="coerce").fillna(0) > 0].sort_values("errorCount", ascending=False).head(5)
         if not top_errors.empty:
-            fig_err = px.bar(top_errors.sort_values("errorCount"), x="errorCount", y="Scenario", orientation="h", title="Top Error Transactions", text="errorCount")
-            fig_err.update_layout(height=240, margin=dict(l=10, r=10, t=40, b=10), xaxis_title="Errors", yaxis_title="")
+            fig_err = px.bar(
+                top_errors.sort_values("errorCount"),
+                x="errorCount",
+                y="Scenario",
+                orientation="h",
+                title="Top Error Transactions",
+                text="errorCount",
+            )
+            fig_err.update_layout(height=300, margin=dict(l=10, r=10, t=45, b=25), xaxis_title="Errors", yaxis_title="")
             c2.plotly_chart(fig_err, use_container_width=True)
         else:
             c2.info("No API errors found.")
 
         if not tracks.empty:
             st.markdown("##### Top Slow Tracks (P95)")
-            st.dataframe(tracks[["Feature", "P95_Sec", "Avg_Sec", "Errors", "SLA Fail %"]].head(5), use_container_width=True, hide_index=True)
+            st.dataframe(tracks[["Feature", "P95_Sec", "Avg_Sec", "Errors", "SLA Fail %"]].head(8), use_container_width=True, hide_index=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
     with mid:
-        st.markdown('<div class="panel"><div class="panel-title purple-title">CROSS RUN / PROGRAM COMPARISON</div>', unsafe_allow_html=True)
-        if len(run_frames) > 1:
-            summary_rows = []
-            for frames in run_frames:
-                row = summarize_run(frames["APIs"])
-                row["Run"] = frames["Label"]
-                summary_rows.append(row)
-            summary = pd.DataFrame(summary_rows)
-            st.dataframe(summary[["Run", "avg_sec", "p95_sec", "success_rate", "error_rate", "sla_compliance", "performance_score"]], use_container_width=True, hide_index=True)
-            fig_trend = px.line(summary, x="Run", y=["avg_sec", "p95_sec"], markers=True, title="Trend Across Uploaded Runs")
-            fig_trend.update_layout(height=260, margin=dict(l=10, r=10, t=40, b=45), xaxis_title="", yaxis_title="Seconds")
+        st.markdown('<div class="panel"><div class="panel-title purple-title">RESULT / REGION COMPARISON</div>', unsafe_allow_html=True)
+        summary_rows = []
+        for frames in run_frames:
+            row = summarize_run(frames["APIs"])
+            row["Run"] = frames["Label"]
+            row["Region"] = frames.get("Region", region_from_frames(frames))
+            summary_rows.append(row)
+        summary = pd.DataFrame(summary_rows)
+
+        if not summary.empty:
+            st.dataframe(
+                summary[["Region", "Run", "avg_sec", "p95_sec", "success_rate", "error_rate", "sla_compliance", "performance_score"]],
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            fig_trend = px.line(
+                summary,
+                x="Run",
+                y=["avg_sec", "p95_sec"],
+                color="Region" if "Region" in summary.columns else None,
+                markers=True,
+                title="Trend Across Selected Results",
+            )
+            fig_trend.update_layout(height=300, margin=dict(l=10, r=10, t=45, b=70), xaxis_title="", yaxis_title="Seconds")
             st.plotly_chart(fig_trend, use_container_width=True)
 
-            combined = []
-            for frames in run_frames:
-                tmp = track_summary(frames["APIs"])
-                tmp["Run"] = frames["Label"]
-                combined.append(tmp)
-            heat = pd.concat(combined, ignore_index=True) if combined else pd.DataFrame()
-            if not heat.empty:
-                pivot = heat.pivot_table(index="Feature", columns="Run", values="P95_Sec", aggfunc="mean").fillna(0)
-                pivot = pivot.loc[pivot.max(axis=1).sort_values(ascending=False).head(8).index]
-                match = pivot.copy()
-                for track_name in match.index:
-                    for col_name in match.columns:
-                        match.loc[track_name, col_name] = sla_color_for_track(track_name, pivot.loc[track_name, col_name])
-                fig_heat = px.imshow(
-                    match,
-                    text_auto=False,
-                    title="Performance Heatmap: Green = P95 Meets SLA, Red = SLA Breach",
-                    color_continuous_scale=[(0, "#C62828"), (0.499, "#C62828"), (0.5, "#2E7D32"), (1, "#2E7D32")],
-                    aspect="auto",
-                    zmin=0,
-                    zmax=1,
-                )
-                fig_heat.update_traces(text=pivot.round(2).astype(str) + "s", texttemplate="%{text}")
-                fig_heat.update_layout(height=310, margin=dict(l=10, r=10, t=50, b=20), coloraxis_showscale=False)
-                st.plotly_chart(fig_heat, use_container_width=True)
-        else:
-            tracks = track_summary(df)
-            if not tracks.empty:
-                st.dataframe(tracks[["Feature", "Track Type", "APIs", "Avg_Sec", "P95_Sec", "Max_Sec", "Errors", "SLA Fail %"]].head(10), use_container_width=True, hide_index=True)
-                p95_table = tracks.head(12).copy()
-                p95_table["SLA Match"] = p95_table.apply(lambda r: sla_color_for_track(r["Feature"], r["P95_Sec"]), axis=1)
-                heat_values = p95_table.set_index("Feature")[["SLA Match"]]
-                p95_text = p95_table.set_index("Feature")[["P95_Sec"]].round(2).astype(str) + "s"
-                fig_heat = px.imshow(
-                    heat_values,
-                    text_auto=False,
-                    title="Metrics Dashboard by Track: Green = P95 Meets SLA, Red = SLA Breach",
-                    color_continuous_scale=[(0, "#C62828"), (0.499, "#C62828"), (0.5, "#2E7D32"), (1, "#2E7D32")],
-                    aspect="auto",
-                    zmin=0,
-                    zmax=1,
-                )
-                fig_heat.update_traces(text=p95_text, texttemplate="%{text}")
-                fig_heat.update_layout(height=360, margin=dict(l=10, r=10, t=50, b=20), coloraxis_showscale=False)
-                st.plotly_chart(fig_heat, use_container_width=True)
+        combined = []
+        for frames in run_frames:
+            tmp = track_summary(frames["APIs"])
+            tmp["Run"] = frames["Label"]
+            tmp["Region"] = frames.get("Region", region_from_frames(frames))
+            combined.append(tmp)
+        heat = pd.concat(combined, ignore_index=True) if combined else pd.DataFrame()
+        if not heat.empty:
+            heat["Column"] = heat["Region"] + " | " + heat["Run"].astype(str).str.slice(0, 22)
+            pivot = heat.pivot_table(index="Feature", columns="Column", values="P95_Sec", aggfunc="mean").fillna(0)
+            pivot = pivot.loc[pivot.max(axis=1).sort_values(ascending=False).head(14).index]
+            match = pivot.copy()
+            for track_name in match.index:
+                for col_name in match.columns:
+                    match.loc[track_name, col_name] = sla_color_for_track(track_name, pivot.loc[track_name, col_name])
+            fig_heat = px.imshow(
+                match,
+                text_auto=False,
+                title="Performance Heatmap: Green = P95 Meets SLA, Red = SLA Breach",
+                color_continuous_scale=[(0, "#C62828"), (0.499, "#C62828"), (0.5, "#2E7D32"), (1, "#2E7D32")],
+                aspect="auto",
+                zmin=0,
+                zmax=1,
+            )
+            fig_heat.update_traces(text=pivot.round(2).astype(str) + "s", texttemplate="%{text}")
+            fig_heat.update_layout(height=560, margin=dict(l=10, r=10, t=55, b=95), coloraxis_showscale=False)
+            st.plotly_chart(fig_heat, use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
     with right:
-        st.markdown('<div class="panel"><div class="panel-title teal-title">DEGRADATION / AGGREGATED PERFORMANCE OVERVIEW METRICS</div>', unsafe_allow_html=True)
+        st.markdown('<div class="panel"><div class="panel-title teal-title">DEGRADATION / INSIGHTS</div>', unsafe_allow_html=True)
         tracks = track_summary(df)
-        if len(run_frames) > 1:
-            summary_rows = []
-            for frames in run_frames:
-                row = summarize_run(frames["APIs"])
-                row["Run"] = frames["Label"]
-                summary_rows.append(row)
-            summary = pd.DataFrame(summary_rows)
-            fig_error = px.line(summary, x="Run", y="error_rate", markers=True, title="Error Rate Over Runs")
-            fig_error.update_layout(height=260, margin=dict(l=10, r=10, t=40, b=45), xaxis_title="", yaxis_title="Error Rate %")
-            st.plotly_chart(fig_error, use_container_width=True)
-        elif not tracks.empty:
-            fig_dist = px.bar(tracks.head(8).sort_values("P95_Sec"), x="P95_Sec", y="Feature", orientation="h", title="Metrics Distribution (P95)", text="P95_Sec")
+        if not tracks.empty:
+            fig_dist = px.bar(
+                tracks.head(10).sort_values("P95_Sec"),
+                x="P95_Sec",
+                y="Feature",
+                orientation="h",
+                title="Metrics Distribution (P95)",
+                text="P95_Sec",
+                color="Track Type",
+            )
             fig_dist.update_traces(texttemplate="%{text:.1f}s", textposition="outside")
-            fig_dist.update_layout(height=320, margin=dict(l=10, r=10, t=40, b=10), xaxis_title="P95 sec", yaxis_title="")
+            fig_dist.update_layout(height=380, margin=dict(l=10, r=10, t=45, b=20), xaxis_title="P95 sec", yaxis_title="")
             st.plotly_chart(fig_dist, use_container_width=True)
+
+        if len(run_frames) > 1:
+            fig_error = px.line(summary, x="Run", y="error_rate", color="Region", markers=True, title="Error Rate Over Selected Results")
+            fig_error.update_layout(height=280, margin=dict(l=10, r=10, t=45, b=70), xaxis_title="", yaxis_title="Error Rate %")
+            st.plotly_chart(fig_error, use_container_width=True)
 
         st.markdown(f'<div class="insight-box">💡 {auto_insight(run_frames)}</div>', unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
@@ -831,9 +882,10 @@ if dashboard_only:
     if st.session_state.run_frames:
         main_col, chat_col = st.columns([3.2, 1.05])
         with main_col:
-            render_tableau_dashboard(st.session_state.run_frames)
-            render_region_comparison(st.session_state.run_frames)
-            render_drilldown(st.session_state.run_frames)
+            selected_frames = get_dashboard_filtered_frames(st.session_state.run_frames)
+            render_tableau_dashboard(selected_frames)
+            render_region_comparison(selected_frames)
+            render_drilldown(selected_frames)
 
         with chat_col:
             st.markdown('<div class="chat-panel">', unsafe_allow_html=True)

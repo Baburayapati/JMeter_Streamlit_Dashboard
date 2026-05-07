@@ -564,10 +564,52 @@ def build_apis_comparison(json_paths: List[str | Path], labels: List[str]) -> pd
     return comparison_df[ordered]
 
 
+
+def build_comparison_insights_frames(json_paths: List[str | Path], labels: List[str]) -> Dict[str, pd.DataFrame]:
+    """Create aggregated frames for Insights when comparing multiple reports."""
+    all_apis = []
+    all_tx = []
+    all_errors = []
+    run_info_rows = []
+
+    for path, label in zip(json_paths, labels):
+        frames = build_single_report_frames(path)
+        region_info = parse_report_metadata(path)
+        region = region_info.get("Region", "N/A")
+
+        api_df = frames["APIs"].copy()
+        api_df["Run"] = label
+        api_df["Region"] = region
+        all_apis.append(api_df)
+
+        tx_df = frames["Transactions"].copy()
+        tx_df["Run"] = label
+        tx_df["Region"] = region
+        all_tx.append(tx_df)
+
+        err_df = frames["Errors"].copy()
+        err_df["Run"] = label
+        err_df["Region"] = region
+        all_errors.append(err_df)
+
+        info_row = frames["Run_Info"].iloc[0].to_dict() if "Run_Info" in frames and not frames["Run_Info"].empty else region_info
+        info_row["Run"] = label
+        run_info_rows.append(info_row)
+
+    combined = {
+        "APIs": pd.concat(all_apis, ignore_index=True) if all_apis else pd.DataFrame(),
+        "Transactions": pd.concat(all_tx, ignore_index=True) if all_tx else pd.DataFrame(),
+        "Errors": pd.concat(all_errors, ignore_index=True) if all_errors else pd.DataFrame(),
+        "Run_Info": pd.DataFrame(run_info_rows),
+    }
+    return combined
+
+
 def build_comparison_report(json_paths: List[str | Path], labels: List[str], output_excel_path: str | Path) -> None:
-    # For comparison mode, keep the workbook focused:
-    # Insights + Track_Comparison + APIs_Comparison only.
-    latest_frames = build_single_report_frames(json_paths[-1])
+    # Comparison mode workbook:
+    # Insights uses aggregated results across all uploaded files/regions.
+    # Track_Comparison and APIs_Comparison remain side-by-side comparison sheets.
+    comparison_insights = build_comparison_insights_frames(json_paths, labels)
     frames = {
         "APIs_Comparison": build_apis_comparison(json_paths, labels)
     }
@@ -576,7 +618,7 @@ def build_comparison_report(json_paths: List[str | Path], labels: List[str], out
         frames,
         output_excel_path,
         track_matrix=track_matrix,
-        insights_frames=latest_frames,
+        insights_frames=comparison_insights,
         comparison_mode=True,
     )
 
