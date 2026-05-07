@@ -609,17 +609,13 @@ streamlit run app.py
 - Chatbot examples expanded and irrelevant questions get a report-focused response.
 
 
-## v56 Final dashboard polish
+## v57 Main UI fixed
 
-- Main page now shows only the requested title and simple upload instruction.
+- Rebuilt from stable v55.
+- Main hero now fits text and removes `Upload JSON → Generate Report`.
+- Removed `Upload performance report files` heading.
+- Main message now says:
+  `Upload one JMeter statistics.json file for a normal dashboard report. Upload two or more files for comparison.`
 - Executive Dashboard / Excel Report / AI Chatbot cards are visible by default.
-- Links/actions activate after report generation.
-- Excel download button is inside the Excel Report card.
-- Dashboard title updated to CiscoIQ-SaaS-Support-Services Performance Dashboard.
-- Data & Filters panel now has Apply Filters and Reset Filters buttons.
-- Insights panel shows up to 6 summary points.
-- REGION COMPARISON title no longer says P95.
-- PERFORMANCE HEATMAP title no longer says P95.
-- Removed separate P95 by Region card.
-- Added Track Comparison Summary directly on the dashboard overview.
-- Full Compare tab still contains detailed track comparison like Excel Track_Comparison.
+- Excel download button is inside the Excel Report card after generation.
+- Dashboard title corrected to CiscoIQ-SaaS-Support-Services Performance Dashboard.
