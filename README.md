@@ -607,3 +607,19 @@ streamlit run app.py
 - View all links are now clickable buttons and route to the correct dashboard section.
 - Dashboard Compare tab now shows Track Comparison tables using the same logic as Excel Track_Comparison.
 - Chatbot examples expanded and irrelevant questions get a report-focused response.
+
+
+## v56 Final dashboard polish
+
+- Main page now shows only the requested title and simple upload instruction.
+- Executive Dashboard / Excel Report / AI Chatbot cards are visible by default.
+- Links/actions activate after report generation.
+- Excel download button is inside the Excel Report card.
+- Dashboard title updated to CiscoIQ-SaaS-Support-Services Performance Dashboard.
+- Data & Filters panel now has Apply Filters and Reset Filters buttons.
+- Insights panel shows up to 6 summary points.
+- REGION COMPARISON title no longer says P95.
+- PERFORMANCE HEATMAP title no longer says P95.
+- Removed separate P95 by Region card.
+- Added Track Comparison Summary directly on the dashboard overview.
+- Full Compare tab still contains detailed track comparison like Excel Track_Comparison.
