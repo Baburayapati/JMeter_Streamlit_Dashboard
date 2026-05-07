@@ -62,6 +62,100 @@ st.markdown("""
     margin: 0 auto 18px auto;
     max-width: 980px;
 }
+
+/* v61 dashboard header + tabs polish */
+.top-nav {
+    background: linear-gradient(90deg,#06122f 0%, #081a3f 54%, #0b1f55 100%) !important;
+    color:white !important;
+    border-radius: 0 0 16px 16px !important;
+    padding: 14px 22px !important;
+    margin: -0.6rem -1rem 12px -1rem !important;
+    box-shadow: 0 10px 28px rgba(6,18,47,.22) !important;
+}
+.brand-icon {
+    width:40px !important;
+    height:40px !important;
+    border-radius:12px !important;
+    background:linear-gradient(135deg,#2563eb,#7c3aed) !important;
+    font-size:20px !important;
+}
+.brand-title {
+    font-size:22px !important;
+    font-weight:900 !important;
+    letter-spacing:-.35px !important;
+}
+.brand-sub {
+    font-size:12px !important;
+    opacity:.82 !important;
+}
+.nav-time {
+    font-size:12px !important;
+    opacity:.88 !important;
+}
+
+/* Streamlit radio used as dashboard tabs */
+div[role="radiogroup"] {
+    display:flex !important;
+    justify-content:center !important;
+    gap:14px !important;
+    background: #ffffff !important;
+    border: 1px solid #dbe4f0 !important;
+    border-radius: 14px !important;
+    padding: 10px !important;
+    margin: 0 0 14px 0 !important;
+    box-shadow: 0 8px 20px rgba(15,23,42,.045) !important;
+}
+div[role="radiogroup"] label {
+    background: #f8fbff !important;
+    border: 1px solid #e0e7f3 !important;
+    border-radius: 12px !important;
+    padding: 8px 14px !important;
+    min-width: 118px !important;
+    text-align: center !important;
+    font-weight: 800 !important;
+    color: #0f2b68 !important;
+    transition: .15s ease-in-out !important;
+}
+div[role="radiogroup"] label:hover {
+    border-color:#2563eb !important;
+    box-shadow:0 8px 18px rgba(37,99,235,.12) !important;
+}
+div[role="radiogroup"] label[data-baseweb="radio"] > div:first-child {
+    display:none !important;
+}
+div[role="radiogroup"] label:has(input:checked) {
+    background: linear-gradient(90deg,#4f46e5,#2563eb) !important;
+    color: white !important;
+    border-color: transparent !important;
+    box-shadow: 0 12px 24px rgba(37,99,235,.28) !important;
+}
+
+/* Overview title strip */
+.overview-title-card {
+    background:#ffffff;
+    border:1px solid #dbe4f0;
+    border-radius:16px;
+    padding:0;
+    box-shadow:0 8px 22px rgba(15,23,42,.05);
+    margin-bottom:12px;
+}
+.overview-title-pill {
+    display:inline-block;
+    background:linear-gradient(90deg,#2333a3,#3152d9);
+    color:white;
+    padding:9px 18px;
+    border-radius:12px 12px 12px 0;
+    font-size:15px;
+    font-weight:900;
+    letter-spacing:.2px;
+    margin:0 0 8px 0;
+}
+.overview-title-sub {
+    color:#667085;
+    font-size:12px;
+    padding:0 18px 12px 18px;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -508,15 +602,16 @@ def combined_df(run_frames: List[Dict[str, pd.DataFrame]]) -> pd.DataFrame:
 
 
 
+
 def top_nav() -> str:
     st.markdown(
         """
 <div class="top-nav">
   <div class="brand">
-    <div class="brand-icon">↯</div>
+    <div class="brand-icon">📈</div>
     <div>
       <div class="brand-title">CiscoIQ-SaaS-Support-Services Performance Dashboard</div>
-      <div class="brand-sub">Real-time Performance Insights Across Regions</div>
+      <div class="brand-sub">Real-time performance insights across regions</div>
     </div>
   </div>
   <div class="nav-time">Dashboard View<br/>Last Updated</div>
@@ -525,17 +620,25 @@ def top_nav() -> str:
         unsafe_allow_html=True,
     )
 
-    tabs = ["Overview", "Compare", "Trends", "Drilldown", "Reports", "Chatbot"]
+    tabs = ["🏠 Overview", "📊 Compare", "📈 Trends", "🔎 Drilldown", "📄 Reports", "💬 Chatbot"]
+    tab_map = {
+        "🏠 Overview": "Overview",
+        "📊 Compare": "Compare",
+        "📈 Trends": "Trends",
+        "🔎 Drilldown": "Drilldown",
+        "📄 Reports": "Reports",
+        "💬 Chatbot": "Chatbot",
+    }
 
-    # If a "View all..." button requested a tab switch, use it as the next radio default.
     if "nav_target" in st.session_state:
         requested = st.session_state.pop("nav_target")
-        st.session_state["nav_tab_radio"] = requested
+        reverse_map = {v: k for k, v in tab_map.items()}
+        st.session_state["nav_tab_radio"] = reverse_map.get(requested, "🏠 Overview")
 
-    current = st.session_state.get("nav_tab_radio", "Overview")
+    current = st.session_state.get("nav_tab_radio", "🏠 Overview")
     index = tabs.index(current) if current in tabs else 0
 
-    return st.radio(
+    selected = st.radio(
         "Dashboard Navigation",
         tabs,
         horizontal=True,
@@ -543,6 +646,7 @@ def top_nav() -> str:
         key="nav_tab_radio",
         label_visibility="collapsed",
     )
+    return tab_map[selected]
 
 
 def kpi_cards(df: pd.DataFrame) -> None:
@@ -827,7 +931,7 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
             st.markdown("</div>", unsafe_allow_html=True)
             return
 
-        st.markdown('<div class="panel"><div class="panel-title"><span>AGGREGATED PERFORMANCE OVERVIEW METRICS</span><span class="tag">Across Selected Results</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="overview-title-card"><div class="overview-title-pill">AGGREGATED PERFORMANCE OVERVIEW METRICS</div><div class="overview-title-sub">Across selected result files, dates and regions</div>', unsafe_allow_html=True)
         kpi_cards(df)
         st.markdown("</div>", unsafe_allow_html=True)
 
