@@ -551,3 +551,24 @@ streamlit run app.py
 - Expanded `Top Slow Tracks (P95)` table.
 - Added `Max Response Sec` along with `95th Perc Sec` and `Avg Sec`.
 - Added a full-width `TOP SLOW TRACKS DETAILS (P95 / AVG / MAX)` dashboard section so metrics are readable.
+
+
+## v51 Executive UI
+
+- Rebuilt Streamlit UI into executive-dashboard style.
+- Main page is now clean upload-only page.
+- Dashboard metrics only open in a separate dashboard tab.
+- Added dark top navigation/header.
+- Added executive KPI cards:
+  - Health Score
+  - SLA Pass %
+  - SLA Fail %
+  - Total APIs
+  - Total Samples
+  - Total Errors
+- Added right-side Data & Filters panel.
+- Added right-side Insights panel.
+- Added right-side AI Assistant.
+- Improved chart spacing and dashboard layout.
+- Added region comparison table/heatmap.
+- Added readable Top Slow Tracks Details table with P95 / Avg / Max.

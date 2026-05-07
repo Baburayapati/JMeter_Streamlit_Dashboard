@@ -4,10 +4,12 @@ from __future__ import annotations
 from pathlib import Path
 import re
 import tempfile
+import uuid
 from typing import Dict, List, Tuple
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -17,141 +19,310 @@ from main import build_report, build_comparison_report, build_single_report_fram
 APP_TITLE = "CiscoIQ-SaaS-Support-Services Performance Dashboard"
 
 st.set_page_config(page_title=APP_TITLE, layout="wide")
+
 params = st.query_params
 dashboard_only = params.get("view", "") == "dashboard"
-
 run_id = params.get("run_id", "")
+
 
 @st.cache_resource
 def get_dashboard_store():
     return {}
 
+
 dashboard_store = get_dashboard_store()
 
-
-
-if dashboard_only:
-    st.markdown("""
-    <style>
-    section[data-testid="stSidebar"] {display:none;}
-    .block-container {padding-top: 1rem;}
-    
-.kpi-strip {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 0;
-    border-radius: 4px;
-    overflow: hidden;
-    margin-top: 0.45rem;
-}
-.kpi-cell {
-    color: white;
-    padding: 9px 10px;
-    min-height: 58px;
-    font-weight: 800;
-    border-right: 1px solid rgba(255,255,255,0.25);
-}
-.kpi-label {
-    font-size: 13px;
-    line-height: 1.1;
-}
-.kpi-value {
-    font-size: 18px;
-    margin-top: 5px;
-    line-height: 1.1;
-}
-.chat-panel {
-    background: rgba(255,255,255,0.88);
-    border: 1px solid rgba(21,76,121,0.16);
-    border-radius: 11px;
-    padding: 0.65rem;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.045);
-}
-
-
-/* Make top slow track tables easier to read */
-[data-testid="stDataFrame"] {
-    font-size: 13px;
-}
-
-</style>
-    """, unsafe_allow_html=True)
 
 st.markdown(
     """
 <style>
+:root {
+  --navy:#07132f;
+  --navy2:#0a1b3f;
+  --blue:#2563eb;
+  --purple:#6d28d9;
+  --green:#16a34a;
+  --red:#dc2626;
+  --orange:#f59e0b;
+  --card:#ffffff;
+  --border:#dbe4f0;
+  --muted:#667085;
+}
 .stApp {
-    background: linear-gradient(135deg, #eef7ff 0%, #f6f2ff 45%, #ecfff4 100%);
+  background: #f4f7fb;
+  color: #111827;
 }
-[data-testid="stHeader"] { background: rgba(255,255,255,0); }
-.block-container { padding-top: 1rem; padding-bottom: 2rem; max-width: 1500px; }
-.dashboard-title {
-    display: table; margin: 0 auto 0.45rem auto;
-    background: linear-gradient(90deg, #137333, #0b8043);
-    color: white; padding: 10px 18px; border-radius: 10px;
-    box-shadow: 0 8px 24px rgba(19,115,51,0.20);
-    font-size: 18px; line-height: 1.2; font-weight: 800;
-    text-align: center; width: auto; max-width: fit-content;
+[data-testid="stHeader"] { background: transparent; }
+.block-container {
+  max-width: 1560px;
+  padding: 0.6rem 1rem 1.6rem 1rem;
 }
-.dashboard-subtitle {
-    text-align: center; font-size: 12px; color: #27364a; margin-bottom: 0.75rem;
+#MainMenu, footer { visibility: hidden; }
+.app-shell {
+  background: white;
+  border: 1px solid #dce3ef;
+  border-radius: 18px;
+  padding: 12px;
+  box-shadow: 0 10px 30px rgba(10,27,63,0.06);
 }
-.open-link {
-    display: inline-block; text-decoration: none !important; color: #fff !important;
-    background: linear-gradient(90deg, #1565c0, #0b8043);
-    padding: 8px 14px; border-radius: 9px; font-weight: 700; font-size: 13px;
-    box-shadow: 0 5px 16px rgba(21,101,192,0.22); margin-bottom: 0.65rem;
+.hero {
+  background:
+    radial-gradient(circle at 20% 20%, rgba(59,130,246,.22), transparent 28%),
+    radial-gradient(circle at 80% 10%, rgba(124,58,237,.28), transparent 26%),
+    linear-gradient(135deg,#07132f 0%, #0a1b3f 50%, #0f2b68 100%);
+  color:white;
+  border-radius: 18px;
+  padding: 26px 28px;
+  box-shadow: 0 14px 32px rgba(7,19,47,.18);
+  margin-bottom: 18px;
 }
+.hero h1 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.15;
+  font-weight: 850;
+  letter-spacing:-.4px;
+}
+.hero p {
+  margin: 8px 0 0 0;
+  color: rgba(255,255,255,.82);
+  font-size: 14px;
+}
+.hero-actions {
+  display:flex;
+  gap:12px;
+  align-items:center;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+.primary-pill {
+  display:inline-block;
+  background: linear-gradient(90deg,#4f46e5,#2563eb);
+  color:white !important;
+  text-decoration:none !important;
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-weight:750;
+  box-shadow: 0 12px 24px rgba(37,99,235,.24);
+}
+.secondary-pill {
+  display:inline-block;
+  background: rgba(255,255,255,.10);
+  border: 1px solid rgba(255,255,255,.20);
+  color:white !important;
+  text-decoration:none !important;
+  padding: 9px 14px;
+  border-radius: 12px;
+  font-weight:650;
+}
+.top-nav {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  background: linear-gradient(90deg,#07132f,#0a1b3f);
+  color:white;
+  border-radius: 0 0 14px 14px;
+  padding: 12px 18px;
+  margin: -0.6rem -1rem 14px -1rem;
+  box-shadow: 0 8px 22px rgba(7,19,47,.14);
+}
+.brand {
+  display:flex;
+  align-items:center;
+  gap: 12px;
+}
+.brand-icon {
+  width:34px;height:34px;border-radius:10px;
+  background:linear-gradient(135deg,#4f46e5,#06b6d4);
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;
+}
+.brand-title { font-size:19px;font-weight:850;line-height:1.1; }
+.brand-sub { font-size:11px;color:rgba(255,255,255,.72);margin-top:2px;}
+.nav-tabs {
+  display:flex;
+  gap: 8px;
+  align-items:center;
+}
+.nav-tab {
+  color:white;
+  padding:8px 12px;
+  border-radius:10px;
+  font-size:13px;
+  font-weight:650;
+  opacity:.9;
+}
+.nav-tab.active {
+  background: linear-gradient(90deg,#4f46e5,#2563eb);
+  box-shadow:0 8px 16px rgba(37,99,235,.28);
+}
+.nav-time {font-size:11px;color:rgba(255,255,255,.82);text-align:right;}
 .panel {
-    background: rgba(255,255,255,0.88);
-    border: 1px solid rgba(21,76,121,0.16);
-    border-radius: 11px; padding: 0.65rem;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.045);
-    margin-bottom: 0.75rem;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  padding: 14px;
+  box-shadow: 0 8px 20px rgba(15,23,42,.045);
+  margin-bottom: 12px;
 }
 .panel-title {
-    text-align: center; color: white; font-size: 14px; font-weight: 800;
-    padding: 6px 8px; border-radius: 8px; margin-bottom: 0.45rem;
+  font-size: 14px;
+  font-weight: 850;
+  color: #0f2b68;
+  margin-bottom: 12px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
 }
-.green-title { background: linear-gradient(90deg, #137333, #0b8043); }
-.blue-title { background: linear-gradient(90deg, #0d47a1, #1565c0); }
-.purple-title { background: linear-gradient(90deg, #4527a0, #7b1fa2); }
-.teal-title { background: linear-gradient(90deg, #006064, #00838f); }
-.insight-box {
-    background: #eaf4ff; border: 1px solid #90caf9; border-radius: 10px;
-    padding: 0.85rem; font-size: 13px; color: #12324f; min-height: 86px;
+.panel-title .tag {
+  font-size:11px;
+  background:#eef4ff;
+  color:#2563eb;
+  padding:3px 8px;
+  border-radius:999px;
 }
-.rules-section {
-    background: rgba(255,255,255,0.72); border: 1px solid rgba(21,76,121,0.12);
-    border-radius: 12px; padding: 0.7rem 0.9rem; margin-bottom: 0.8rem;
+.kpi-grid {
+  display:grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
 }
-.rules-section h3 {
-    color: #154c79 !important; margin-top: 0.25rem !important;
-    margin-bottom: 0.2rem !important; font-size: 15px !important;
-    line-height: 1.15 !important; font-weight: 650 !important;
+.kpi-card {
+  background:white;
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:14px;
+  min-height:96px;
+  box-shadow: 0 6px 18px rgba(15,23,42,.045);
+  display:flex;
+  gap:12px;
+  align-items:flex-start;
 }
-.rules-section li {
-    font-size: 12.5px !important; line-height: 1.3 !important;
-    font-weight: 400 !important; margin-bottom: 0.15rem !important;
+.kpi-icon {
+  width:38px;height:38px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  color:white;font-size:19px;flex:0 0 38px;
+  box-shadow: 0 10px 18px rgba(0,0,0,.12);
 }
-.metric-pill {
-    color: #2e7d32 !important; background: rgba(46,125,50,0.08);
-    border-radius: 7px; padding: 1px 6px; font-weight: 500; white-space: nowrap;
+.kpi-label { font-size:12px;color:#111827;font-weight:750; }
+.kpi-value { font-size:24px;font-weight:850;color:#111827;margin-top:6px;line-height:1.0; }
+.kpi-sub { font-size:11px;color:var(--muted);margin-top:8px; }
+.kpi-sub.good { color:#15803d; }
+.kpi-sub.bad { color:#dc2626; }
+.grid-3 {
+  display:grid;
+  grid-template-columns: 1.1fr 1fr 1fr;
+  gap:12px;
+}
+.grid-2 {
+  display:grid;
+  grid-template-columns: 1.1fr .9fr;
+  gap:12px;
+}
+.side-card {
+  background:white;
+  border:1px solid var(--border);
+  border-radius:13px;
+  padding:14px;
+  box-shadow: 0 8px 20px rgba(15,23,42,.045);
+  margin-bottom:12px;
+}
+.insight-item {
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+  margin: 10px 0;
+  font-size:13px;
+  color:#1f2937;
+}
+.dot {
+  width:22px;height:22px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  color:white;font-size:12px;font-weight:800;flex:0 0 22px;
+}
+.filter-card {
+  background:#f8fbff;
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding: 12px;
+}
+.chat-card {
+  background:white;
+  border: 1px solid #c7b7ff;
+  border-radius:13px;
+  padding:14px;
+  box-shadow: 0 8px 22px rgba(109,40,217,.10);
+}
+.chat-header {
+  background:linear-gradient(90deg,#6d28d9,#7c3aed);
+  color:white;
+  padding:10px 12px;
+  border-radius:10px;
+  font-size:13px;
+  font-weight:800;
+  margin:-2px -2px 12px -2px;
+}
+.mini-link {
+  color:#2563eb !important;
+  font-size:12px;
+  font-weight:700;
+  text-decoration:none !important;
+}
+.stButton > button {
+  border-radius: 10px !important;
+  font-weight: 750 !important;
+}
+.stDownloadButton > button {
+  border-radius: 10px !important;
+  font-weight: 750 !important;
 }
 [data-testid="stFileUploader"] {
-    background: rgba(255,255,255,0.86); border: 1px solid rgba(21,76,121,0.18);
-    border-radius: 14px; padding: 12px; box-shadow: 0 8px 22px rgba(0,0,0,0.055);
+  background:white;
+  border:1px dashed #a6b4ca;
+  border-radius:14px;
+  padding: 16px;
 }
-div[data-testid="stMetric"] {
-    background: rgba(255,255,255,0.92); border: 1px solid rgba(21,76,121,0.14);
-    border-radius: 12px; padding: 0.55rem 0.65rem;
-    box-shadow: 0 5px 16px rgba(0,0,0,0.045);
+[data-testid="stMetric"] {
+  background:white;
+  border-radius: 12px;
 }
-.stDownloadButton button, .stButton button { border-radius: 10px; font-weight: 700; }
+.upload-card {
+  max-width: 980px;
+  margin: 0 auto;
+}
+.main-page-card {
+  background:white;
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:22px;
+  box-shadow: 0 12px 30px rgba(15,23,42,.06);
+  margin-bottom:16px;
+}
+.feature-grid {
+  display:grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap:12px;
+  margin-top:14px;
+}
+.feature {
+  border:1px solid #e3e9f5;
+  border-radius:14px;
+  padding:14px;
+  background:#fbfdff;
+}
+.feature h4 { margin:0 0 6px 0;font-size:14px;color:#0f2b68; }
+.feature p { margin:0;color:#667085;font-size:12px; }
+@media(max-width:1100px){
+  .kpi-grid,.grid-3,.grid-2,.feature-grid {grid-template-columns:1fr;}
+  .nav-tabs {display:none;}
+}
 </style>
-    """,
+""",
     unsafe_allow_html=True,
 )
+
+
+def get_store():
+    return dashboard_store
 
 
 def add_ui_sla_columns(apis_df: pd.DataFrame) -> pd.DataFrame:
@@ -180,12 +351,33 @@ def process_uploaded_file(path: Path, label: str) -> Dict[str, pd.DataFrame]:
     frames = build_single_report_frames(path)
     frames["APIs"] = add_ui_sla_columns(frames["APIs"])
     frames["Label"] = label
+    frames["Region"] = region_from_frames(frames)
     return frames
+
+
+def region_from_frames(frames: Dict[str, pd.DataFrame]) -> str:
+    info = frames.get("Run_Info")
+    if info is not None and not info.empty and "Region" in info.columns:
+        region = str(info.iloc[0].get("Region", "N/A")).strip()
+        if region and region.upper() != "N/A":
+            return region
+    label = str(frames.get("Label", ""))
+    upper = label.upper()
+    for region in ["APJC", "EMEA", "US", "AMER", "EU", "LATAM", "INDIA"]:
+        if re.search(rf"(?:^|[_\-\s]){region}(?:$|[_\-\s])", upper):
+            return region
+    return "Unknown"
+
+
+def add_region_to_frames(run_frames: List[Dict[str, pd.DataFrame]]) -> List[Dict[str, pd.DataFrame]]:
+    for frames in run_frames:
+        frames["Region"] = region_from_frames(frames)
+    return run_frames
 
 
 def summarize_run(df: pd.DataFrame) -> Dict[str, float]:
     if df.empty:
-        return dict(avg_sec=0, success_rate=0, error_rate=0, transactions=0, performance_score=0, sla_compliance=0, errors=0, samples=0, p95_sec=0)
+        return dict(avg_sec=0, success_rate=0, error_rate=0, transactions=0, performance_score=0, sla_compliance=0, errors=0, samples=0, p95_sec=0, max_sec=0)
     samples = pd.to_numeric(df.get("sampleCount", 0), errors="coerce").fillna(0).sum()
     errors = pd.to_numeric(df.get("errorCount", 0), errors="coerce").fillna(0).sum()
     success_rate = round(((samples - errors) / samples) * 100, 2) if samples else 0
@@ -202,6 +394,7 @@ def summarize_run(df: pd.DataFrame) -> Dict[str, float]:
         errors=int(errors),
         samples=int(samples),
         p95_sec=round(float(df["95thPercentile Resp Time in Sec"].mean()), 2) if "95thPercentile Resp Time in Sec" in df.columns else 0,
+        max_sec=round(float(df["MaxRes Time in sec"].max()), 2) if "MaxRes Time in sec" in df.columns else 0,
     )
 
 
@@ -232,232 +425,96 @@ def track_summary(df: pd.DataFrame) -> pd.DataFrame:
     return out.sort_values(["P95_Sec", "Avg_Sec", "Errors"], ascending=False)
 
 
-
-
-def region_from_frames(frames: Dict[str, pd.DataFrame]) -> str:
-    info = frames.get("Run_Info")
-    if info is not None and not info.empty and "Region" in info.columns:
-        region = str(info.iloc[0].get("Region", "N/A")).strip()
-        return region if region and region.upper() != "N/A" else "Unknown"
-    label = str(frames.get("Label", ""))
-    upper = label.upper()
-    for region in ["US", "EMEA", "APJC", "AMER", "EU", "LATAM", "INDIA"]:
-        if re.search(rf"(?:^|[_\-\s]){region}(?:$|[_\-\s])", upper):
-            return region
-    return "Unknown"
-
-
-def add_region_to_frames(run_frames: List[Dict[str, pd.DataFrame]]) -> List[Dict[str, pd.DataFrame]]:
-    for frames in run_frames:
-        frames["Region"] = region_from_frames(frames)
-    return run_frames
-
-
 def sla_color_for_track(track_name: str, p95_value: float) -> float:
-    """Return 1 when within SLA, 0 when breached. Used for green/red heatmaps."""
     threshold = 10 if str(track_name).upper().startswith("ASKAI") else 2
     return 1 if float(p95_value or 0) < threshold else 0
 
 
-
-def render_open_new_tab_button(run_id_value: str = "") -> None:
-    """Open dashboard metrics in a new tab. Only dashboard view is opened."""
-    try:
-        dashboard_url = st.secrets.get("DASHBOARD_URL", "")
-    except Exception:
-        dashboard_url = ""
-
-    if dashboard_url and run_id_value:
-        url_js = f"{dashboard_url}?view=dashboard&run_id={run_id_value}"
-    elif dashboard_url:
-        url_js = f"{dashboard_url}?view=dashboard"
-    elif run_id_value:
-        url_js = f"?view=dashboard&run_id={run_id_value}"
-    else:
-        url_js = "?view=dashboard"
-
-    components.html(
-        f"""
-        <div style="text-align:center; margin: 0 0 10px 0;">
-          <button
-            onclick="window.open('{url_js}', '_blank')"
-            style="
-              background: linear-gradient(90deg, #1565c0, #0b8043);
-              color: white;
-              padding: 8px 14px;
-              border: 0;
-              border-radius: 9px;
-              font-weight: 700;
-              font-size: 13px;
-              box-shadow: 0 5px 16px rgba(21,101,192,0.22);
-              cursor: pointer;">
-            Open Dashboard in New Tab ↗
-          </button>
-        </div>
-        """,
-        height=44,
-    )
-
-
-def render_region_comparison(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
-    region_rows = []
+def combined_df(run_frames: List[Dict[str, pd.DataFrame]]) -> pd.DataFrame:
+    parts = []
     for frames in run_frames:
-        df = frames["APIs"].copy()
-        region = frames.get("Region", region_from_frames(frames))
-        s = summarize_run(df)
-        s["Region"] = region
-        s["Run"] = frames["Label"]
-        region_rows.append(s)
-
-    if not region_rows:
-        return
-
-    region_summary = pd.DataFrame(region_rows)
-    available_regions = sorted(region_summary["Region"].dropna().astype(str).unique().tolist())
-
-    st.markdown('<div class="panel"><div class="panel-title teal-title">REGION COMPARISON</div>', unsafe_allow_html=True)
-
-    selected_regions = st.multiselect(
-        "Compare Regions",
-        available_regions,
-        default=available_regions,
-        help="Upload files with region names like US, EMEA, or APJC in the filename. Example: ..._US_1Hour_April-19-2026_Report.json",
-    )
-
-    filtered_summary = region_summary[region_summary["Region"].isin(selected_regions)].copy()
-    if filtered_summary.empty:
-        st.warning("No selected region data found.")
-        st.markdown("</div>", unsafe_allow_html=True)
-        return
-
-    st.dataframe(
-        filtered_summary[["Region", "Run", "avg_sec", "p95_sec", "success_rate", "error_rate", "sla_compliance", "performance_score", "transactions"]],
-        use_container_width=True,
-        hide_index=True,
-    )
-
-    c1, c2 = st.columns(2)
-    fig_region_p95 = px.bar(
-        filtered_summary,
-        x="Region",
-        y="p95_sec",
-        color="Region",
-        text="p95_sec",
-        title="Region Comparison - P95 Response Time",
-    )
-    fig_region_p95.update_traces(texttemplate="%{text:.2f}s", textposition="outside")
-    fig_region_p95.update_layout(height=300, margin=dict(l=10, r=10, t=45, b=30), xaxis_title="", yaxis_title="P95 sec")
-    c1.plotly_chart(fig_region_p95, use_container_width=True)
-
-    fig_region_error = px.bar(
-        filtered_summary,
-        x="Region",
-        y="error_rate",
-        color="Region",
-        text="error_rate",
-        title="Region Comparison - Error Rate %",
-    )
-    fig_region_error.update_traces(texttemplate="%{text:.2f}%", textposition="outside")
-    fig_region_error.update_layout(height=300, margin=dict(l=10, r=10, t=45, b=30), xaxis_title="", yaxis_title="Error Rate %")
-    c2.plotly_chart(fig_region_error, use_container_width=True)
-
-    # Track x Region heatmap based on P95 SLA status: green only when meeting SLA, red when breaching.
-    region_track_rows = []
-    for frames in run_frames:
-        region = frames.get("Region", region_from_frames(frames))
-        if region not in selected_regions:
-            continue
-        ts = track_summary(frames["APIs"])
-        for _, row in ts.iterrows():
-            region_track_rows.append({
-                "Region": region,
-                "Track": row["Feature"],
-                "P95 Sec": row["P95_Sec"],
-                "SLA Match": sla_color_for_track(row["Feature"], row["P95_Sec"]),
-            })
-
-    region_track_df = pd.DataFrame(region_track_rows)
-    if not region_track_df.empty:
-        top_tracks = (
-            region_track_df.groupby("Track")["P95 Sec"]
-            .max()
-            .sort_values(ascending=False)
-            .head(12)
-            .index
-            .tolist()
-        )
-        region_track_df = region_track_df[region_track_df["Track"].isin(top_tracks)]
-        p95_pivot = region_track_df.pivot_table(index="Track", columns="Region", values="P95 Sec", aggfunc="mean").fillna(0)
-        match_pivot = region_track_df.pivot_table(index="Track", columns="Region", values="SLA Match", aggfunc="mean").reindex(index=p95_pivot.index, columns=p95_pivot.columns).fillna(0)
-
-        fig_region_heat = px.imshow(
-            match_pivot,
-            text_auto=False,
-            color_continuous_scale=[(0, "#C62828"), (0.499, "#C62828"), (0.5, "#2E7D32"), (1, "#2E7D32")],
-            aspect="auto",
-            title="Region Performance Heatmap: Green = P95 Meets SLA, Red = SLA Breach",
-            zmin=0,
-            zmax=1,
-        )
-        # Put P95 values as text; color is based only on SLA match.
-        fig_region_heat.update_traces(text=p95_pivot.round(2).astype(str) + "s", texttemplate="%{text}")
-        fig_region_heat.update_layout(height=360, margin=dict(l=10, r=10, t=55, b=25), coloraxis_showscale=False)
-        st.plotly_chart(fig_region_heat, use_container_width=True)
-
-    st.markdown("</div>", unsafe_allow_html=True)
+        tmp = frames["APIs"].copy()
+        tmp["Run"] = frames["Label"]
+        tmp["Region"] = frames.get("Region", region_from_frames(frames))
+        parts.append(tmp)
+    return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
 
 
-
-def render_kpis(df: pd.DataFrame) -> None:
-    s = summarize_run(df)
-    total_apis = int(len(df))
-    total_samples = int(pd.to_numeric(df.get("sampleCount", 0), errors="coerce").fillna(0).sum()) if not df.empty else 0
-    total_errors = int(pd.to_numeric(df.get("errorCount", 0), errors="coerce").fillna(0).sum()) if not df.empty else 0
-    sla_pass = s["sla_compliance"]
-    sla_fail = round(100 - sla_pass, 2) if total_apis else 0
-    html = f"""
-    <div class="kpi-strip">
-      <div class="kpi-cell" style="background:#153B50;"><div class="kpi-label">Health Score</div><div class="kpi-value">{s['performance_score']}</div></div>
-      <div class="kpi-cell" style="background:#1E7D4E;"><div class="kpi-label">SLA Pass %</div><div class="kpi-value">{sla_pass}</div></div>
-      <div class="kpi-cell" style="background:#A61B1B;"><div class="kpi-label">SLA Fail %</div><div class="kpi-value">{sla_fail}</div></div>
-      <div class="kpi-cell" style="background:#31588A;"><div class="kpi-label">Total APIs</div><div class="kpi-value">{total_apis}</div></div>
-      <div class="kpi-cell" style="background:#6A4C93;"><div class="kpi-label">Total Samples</div><div class="kpi-value">{total_samples}</div></div>
-      <div class="kpi-cell" style="background:#9A3412;"><div class="kpi-label">Total Errors</div><div class="kpi-value">{total_errors}</div></div>
+def top_nav() -> None:
+    st.markdown(
+        """
+<div class="top-nav">
+  <div class="brand">
+    <div class="brand-icon">↯</div>
+    <div>
+      <div class="brand-title">JMeter Performance Dashboard</div>
+      <div class="brand-sub">Real-time Performance Insights Across Regions</div>
     </div>
-    """
+  </div>
+  <div class="nav-tabs">
+    <div class="nav-tab active">▣ Overview</div>
+    <div class="nav-tab">▥ Compare</div>
+    <div class="nav-tab">⌁ Trends</div>
+    <div class="nav-tab">⌕ Drilldown</div>
+    <div class="nav-tab">☰ Reports</div>
+    <div class="nav-tab">◌ Chatbot</div>
+  </div>
+  <div class="nav-time">Dashboard View<br/>Last Updated</div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+
+def kpi_cards(df: pd.DataFrame) -> None:
+    s = summarize_run(df)
+    sla_fail = round(100 - s["sla_compliance"], 2) if s["transactions"] else 0
+    cards = [
+        ("🛡", "Health Score", f"{s['performance_score']}", "/100", "#4f46e5", "Performance index"),
+        ("✓", "SLA Pass %", f"{s['sla_compliance']}%", "", "#16a34a", "APIs meeting SLA"),
+        ("×", "SLA Fail %", f"{sla_fail}%", "", "#dc2626", "APIs breaching SLA"),
+        ("▥", "Total APIs", f"{s['transactions']:,}", "", "#2563eb", "Compared transactions"),
+        ("◉", "Total Samples", f"{s['samples']:,}", "", "#7c3aed", "Executed samples"),
+        ("⚠", "Total Errors", f"{s['errors']:,}", "", "#ef4444", "Failed samples"),
+    ]
+    html = '<div class="kpi-grid">'
+    for icon, label, value, suffix, color, sub in cards:
+        html += f"""
+        <div class="kpi-card">
+          <div class="kpi-icon" style="background:{color};">{icon}</div>
+          <div>
+            <div class="kpi-label">{label}</div>
+            <div class="kpi-value">{value}<span style="font-size:12px;color:#667085;margin-left:4px;">{suffix}</span></div>
+            <div class="kpi-sub">{sub}</div>
+          </div>
+        </div>
+        """
+    html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
 
 
-def plot_sla_donut(df: pd.DataFrame):
+def sla_donut(df: pd.DataFrame):
     counts = df["SLA Status"].value_counts().reset_index()
     counts.columns = ["SLA Status", "Count"]
     fig = px.pie(
-        counts, names="SLA Status", values="Count", hole=0.55,
-        color="SLA Status", color_discrete_map={"PASS": "#2E7D32", "FAIL": "#C62828"},
-        title="SLA Status",
+        counts,
+        names="SLA Status",
+        values="Count",
+        hole=0.62,
+        color="SLA Status",
+        color_discrete_map={"PASS": "#2ca02c", "FAIL": "#ef4444"},
     )
-    fig.update_layout(height=210, margin=dict(l=5, r=5, t=40, b=5), legend_title_text="")
+    s = summarize_run(df)
+    fig.update_layout(
+        height=280,
+        margin=dict(l=5, r=5, t=15, b=5),
+        legend=dict(orientation="v", yanchor="middle", y=.5, xanchor="left", x=.82),
+        annotations=[dict(text=f"<b>{s['sla_compliance']}%</b><br>PASS", x=.39, y=.5, font_size=18, showarrow=False)],
+    )
     return fig
 
 
-def auto_insight(run_frames: List[Dict[str, pd.DataFrame]]) -> str:
-    latest = run_frames[-1]
-    df = latest["APIs"]
-    s = summarize_run(df)
-    tracks = track_summary(df)
-    if len(run_frames) > 1:
-        first = summarize_run(run_frames[0]["APIs"])
-        delta = round(s["p95_sec"] - first["p95_sec"], 2)
-        direction = "higher" if delta > 0 else "lower"
-        return f"Latest run P95 is {abs(delta)}s {direction} than baseline. SLA compliance is {s['sla_compliance']}% and error rate is {s['error_rate']}%."
-    if not tracks.empty:
-        worst = tracks.iloc[0]
-        return f"{worst['Feature']} has the highest P95 at {worst['P95_Sec']}s. SLA compliance is {s['sla_compliance']}% with {s['errors']} total errors."
-    return f"SLA compliance is {s['sla_compliance']}% and average response time is {s['avg_sec']}s."
-
-
-
-def get_dashboard_filtered_frames(run_frames: List[Dict[str, pd.DataFrame]]):
+def get_filtered_frames(run_frames: List[Dict[str, pd.DataFrame]]) -> List[Dict[str, pd.DataFrame]]:
     rows = []
     for frames in run_frames:
         info = frames.get("Run_Info")
@@ -469,17 +526,14 @@ def get_dashboard_filtered_frames(run_frames: List[Dict[str, pd.DataFrame]]):
             "Duration": str(info_row.get("Duration", "N/A")),
         })
     meta = pd.DataFrame(rows)
-    st.markdown('<div class="panel"><div class="panel-title teal-title">DASHBOARD FILTERS</div>', unsafe_allow_html=True)
-    c1, c2, c3 = st.columns(3)
     files = meta["Label"].tolist()
-    dates = sorted(meta["Date"].dropna().astype(str).unique().tolist())
-    regions = sorted(meta["Region"].dropna().astype(str).unique().tolist())
-
-    selected_files = c1.multiselect("Result Files", files, default=files)
-    selected_dates = c2.multiselect("Date", dates, default=dates)
-    selected_regions = c3.multiselect("Region", regions, default=regions)
+    dates = sorted(meta["Date"].astype(str).unique().tolist())
+    regions = sorted(meta["Region"].astype(str).unique().tolist())
+    st.markdown('<div class="side-card"><div class="panel-title">DATA & FILTERS</div>', unsafe_allow_html=True)
+    selected_files = st.multiselect("Result File", files, default=files)
+    selected_dates = st.multiselect("Date", dates, default=dates)
+    selected_regions = st.multiselect("Region", regions, default=regions)
     st.markdown("</div>", unsafe_allow_html=True)
-
     keep = meta[
         meta["Label"].isin(selected_files)
         & meta["Date"].isin(selected_dates)
@@ -488,228 +542,176 @@ def get_dashboard_filtered_frames(run_frames: List[Dict[str, pd.DataFrame]]):
     return [frames for frames in run_frames if frames["Label"] in keep] or run_frames
 
 
-
-def render_tableau_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
-    combined_parts = []
-    for frames in run_frames:
-        tmp = frames["APIs"].copy()
-        tmp["Run"] = frames["Label"]
-        tmp["Region"] = frames.get("Region", region_from_frames(frames))
-        combined_parts.append(tmp)
-    df = pd.concat(combined_parts, ignore_index=True) if combined_parts else pd.DataFrame()
-
-    st.markdown('<div class="panel"><div class="panel-title green-title">AGGREGATED PERFORMANCE OVERVIEW METRICS</div>', unsafe_allow_html=True)
-    render_kpis(df)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    left, mid, right = st.columns([1.05, 1.15, 1.15])
-
-    with left:
-        st.markdown('<div class="panel"><div class="panel-title blue-title">WITHIN / SELECTED RESULTS COMPARISON</div>', unsafe_allow_html=True)
-        tracks = track_summary(df)
-        if not tracks.empty:
-            fig_p95 = px.bar(
-                tracks.head(10).sort_values("P95_Sec"),
-                x="Feature",
-                y="P95_Sec",
-                title="Response Time (P95)",
-                text="P95_Sec",
-                color="Feature",
-            )
-            fig_p95.update_traces(texttemplate="%{text:.1f}s", textposition="outside")
-            fig_p95.update_layout(height=360, margin=dict(l=10, r=10, t=45, b=115), xaxis_title="", yaxis_title="P95 sec", showlegend=False)
-            st.plotly_chart(fig_p95, use_container_width=True)
-
-        c1, c2 = st.columns(2)
-        c1.plotly_chart(plot_sla_donut(df), use_container_width=True)
-
-        top_errors = df[pd.to_numeric(df.get("errorCount", 0), errors="coerce").fillna(0) > 0].sort_values("errorCount", ascending=False).head(5)
-        if not top_errors.empty:
-            fig_err = px.bar(
-                top_errors.sort_values("errorCount"),
-                x="errorCount",
-                y="Scenario",
-                orientation="h",
-                title="Top Error Transactions",
-                text="errorCount",
-            )
-            fig_err.update_layout(height=300, margin=dict(l=10, r=10, t=45, b=25), xaxis_title="Errors", yaxis_title="")
-            c2.plotly_chart(fig_err, use_container_width=True)
-        else:
-            c2.info("No API errors found.")
-
-        if not tracks.empty:
-            st.markdown("##### Top Slow Tracks (P95)")
-            top_slow_small = tracks[["Feature", "P95_Sec", "Avg_Sec", "Max_Sec", "Errors", "SLA Fail %"]].head(8).rename(
-                columns={
-                    "Feature": "Track",
-                    "P95_Sec": "95th Perc Sec",
-                    "Avg_Sec": "Avg Sec",
-                    "Max_Sec": "Max Response Sec",
-                    "SLA Fail %": "SLA Fail %",
-                }
-            )
-            st.dataframe(
-                top_slow_small,
-                use_container_width=True,
-                hide_index=True,
-                height=340,
-            )
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with mid:
-        st.markdown('<div class="panel"><div class="panel-title purple-title">RESULT / REGION COMPARISON</div>', unsafe_allow_html=True)
+def auto_insights(run_frames: List[Dict[str, pd.DataFrame]]) -> List[Tuple[str, str, str]]:
+    df = combined_df(run_frames)
+    s = summarize_run(df)
+    tracks = track_summary(df)
+    result = []
+    if len(run_frames) > 1:
         summary_rows = []
         for frames in run_frames:
             row = summarize_run(frames["APIs"])
-            row["Run"] = frames["Label"]
             row["Region"] = frames.get("Region", region_from_frames(frames))
             summary_rows.append(row)
         summary = pd.DataFrame(summary_rows)
+        best = summary.sort_values("sla_compliance", ascending=False).iloc[0]
+        worst = summary.sort_values("error_rate", ascending=False).iloc[0]
+        result.append(("✓", "#16a34a", f"{best['Region']} has best SLA compliance at {best['sla_compliance']}%."))
+        result.append(("!", "#ef4444", f"{worst['Region']} has highest error rate at {worst['error_rate']}%."))
+    if not tracks.empty:
+        worst_track = tracks.iloc[0]
+        result.append(("⚠", "#f59e0b", f"{worst_track['Feature']} is top contributor for P95 latency at {worst_track['P95_Sec']}s."))
+    result.append(("i", "#2563eb", f"Overall SLA compliance is {s['sla_compliance']}% with {s['errors']:,} errors."))
+    return result[:4]
 
-        if not summary.empty:
-            st.dataframe(
-                summary[["Region", "Run", "avg_sec", "p95_sec", "success_rate", "error_rate", "sla_compliance", "performance_score"]],
-                use_container_width=True,
-                hide_index=True,
-            )
 
-            fig_trend = px.line(
-                summary,
-                x="Run",
-                y=["avg_sec", "p95_sec"],
-                color="Region" if "Region" in summary.columns else None,
-                markers=True,
-                title="Trend Across Selected Results",
-            )
-            fig_trend.update_layout(height=300, margin=dict(l=10, r=10, t=45, b=70), xaxis_title="", yaxis_title="Seconds")
-            st.plotly_chart(fig_trend, use_container_width=True)
+def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
+    top_nav()
+    main_col, side_col = st.columns([4.35, .95], gap="medium")
 
-        combined = []
-        for frames in run_frames:
-            tmp = track_summary(frames["APIs"])
-            tmp["Run"] = frames["Label"]
-            tmp["Region"] = frames.get("Region", region_from_frames(frames))
-            combined.append(tmp)
-        heat = pd.concat(combined, ignore_index=True) if combined else pd.DataFrame()
-        if not heat.empty:
-            heat["Column"] = heat["Region"] + " | " + heat["Run"].astype(str).str.slice(0, 22)
-            pivot = heat.pivot_table(index="Feature", columns="Column", values="P95_Sec", aggfunc="mean").fillna(0)
-            pivot = pivot.loc[pivot.max(axis=1).sort_values(ascending=False).head(14).index]
-            match = pivot.copy()
-            for track_name in match.index:
-                for col_name in match.columns:
-                    match.loc[track_name, col_name] = sla_color_for_track(track_name, pivot.loc[track_name, col_name])
-            fig_heat = px.imshow(
-                match,
-                text_auto=False,
-                title="Performance Heatmap: Green = P95 Meets SLA, Red = SLA Breach",
-                color_continuous_scale=[(0, "#C62828"), (0.499, "#C62828"), (0.5, "#2E7D32"), (1, "#2E7D32")],
-                aspect="auto",
-                zmin=0,
-                zmax=1,
-            )
-            fig_heat.update_traces(text=pivot.round(2).astype(str) + "s", texttemplate="%{text}")
-            fig_heat.update_layout(height=560, margin=dict(l=10, r=10, t=55, b=95), coloraxis_showscale=False)
-            st.plotly_chart(fig_heat, use_container_width=True)
+    with side_col:
+        selected_frames = get_filtered_frames(run_frames)
+        insights = auto_insights(selected_frames)
+        st.markdown('<div class="side-card"><div class="panel-title">INSIGHTS</div>', unsafe_allow_html=True)
+        for icon, color, text in insights:
+            st.markdown(f'<div class="insight-item"><div class="dot" style="background:{color};">{icon}</div><div>{text}</div></div>', unsafe_allow_html=True)
+        st.markdown('<a class="mini-link">View all Insights →</a>', unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-    with right:
-        st.markdown('<div class="panel"><div class="panel-title teal-title">DEGRADATION / INSIGHTS</div>', unsafe_allow_html=True)
+        render_chatbot(selected_frames)
+
+        try:
+            dashboard_url = st.secrets.get("DASHBOARD_URL", "")
+        except Exception:
+            dashboard_url = ""
+        if dashboard_url:
+            st.markdown(f'<a class="primary-pill" href="{dashboard_url}?view=dashboard" target="_blank" style="width:100%;text-align:center;">Open Dashboard in New Tab ↗</a>', unsafe_allow_html=True)
+
+    with main_col:
+        df = combined_df(selected_frames)
+        st.markdown('<div class="panel"><div class="panel-title"><span>AGGREGATED PERFORMANCE OVERVIEW METRICS</span><span class="tag">Across Selected Results</span></div>', unsafe_allow_html=True)
+        kpi_cards(df)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown('<div class="grid-3">', unsafe_allow_html=True)
+        # Streamlit does not nest into raw grid well; use columns instead.
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        c1, c2, c3 = st.columns([1.25, 1, 1], gap="medium")
         tracks = track_summary(df)
-        if not tracks.empty:
-            fig_dist = px.bar(
-                tracks.head(10).sort_values("P95_Sec"),
-                x="P95_Sec",
-                y="Feature",
-                orientation="h",
-                title="Metrics Distribution (P95)",
-                text="P95_Sec",
-                color="Track Type",
-            )
-            fig_dist.update_traces(texttemplate="%{text:.1f}s", textposition="outside")
-            fig_dist.update_layout(height=380, margin=dict(l=10, r=10, t=45, b=20), xaxis_title="P95 sec", yaxis_title="")
-            st.plotly_chart(fig_dist, use_container_width=True)
 
-        if len(run_frames) > 1:
-            fig_error = px.line(summary, x="Run", y="error_rate", color="Region", markers=True, title="Error Rate Over Selected Results")
-            fig_error.update_layout(height=280, margin=dict(l=10, r=10, t=45, b=70), xaxis_title="", yaxis_title="Error Rate %")
-            st.plotly_chart(fig_error, use_container_width=True)
+        with c1:
+            st.markdown('<div class="panel"><div class="panel-title">Response Time (P95)</div>', unsafe_allow_html=True)
+            if not tracks.empty:
+                chart_df = tracks.head(9).sort_values("P95_Sec")
+                fig = px.bar(chart_df, x="Feature", y="P95_Sec", text="P95_Sec", color_discrete_sequence=["#0b72d9"])
+                fig.update_traces(texttemplate="%{text:.1f}s", textposition="outside")
+                fig.update_layout(height=300, margin=dict(l=8, r=10, t=5, b=88), xaxis_title="", yaxis_title="P95 (sec)", showlegend=False)
+                st.plotly_chart(fig, use_container_width=True)
+            st.markdown('<a class="mini-link">View all APIs →</a>', unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown(f'<div class="insight-box">💡 {auto_insight(run_frames)}</div>', unsafe_allow_html=True)
+        with c2:
+            st.markdown('<div class="panel"><div class="panel-title">SLA Status</div>', unsafe_allow_html=True)
+            st.plotly_chart(sla_donut(df), use_container_width=True)
+            st.markdown('<a class="mini-link">View SLA Breaches →</a>', unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        with c3:
+            st.markdown('<div class="panel"><div class="panel-title">Top Error Transactions</div>', unsafe_allow_html=True)
+            top_errors = df[pd.to_numeric(df.get("errorCount", 0), errors="coerce").fillna(0) > 0].sort_values("errorCount", ascending=False).head(5)
+            if not top_errors.empty:
+                fig = px.bar(top_errors.sort_values("errorCount"), x="errorCount", y="Scenario", orientation="h", text="errorCount", color_discrete_sequence=["#ef4444"])
+                fig.update_traces(textposition="outside")
+                fig.update_layout(height=300, margin=dict(l=8, r=18, t=5, b=40), xaxis_title="Errors", yaxis_title="", showlegend=False)
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("No API errors found.")
+            st.markdown('<a class="mini-link">View all Errors →</a>', unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        c4, c5, c6 = st.columns([1.05, 1.0, .75], gap="medium")
+        with c4:
+            st.markdown('<div class="panel"><div class="panel-title">REGION COMPARISON (P95)</div>', unsafe_allow_html=True)
+            rows = []
+            for frames in selected_frames:
+                row = summarize_run(frames["APIs"])
+                row["Region"] = frames.get("Region", region_from_frames(frames))
+                rows.append(row)
+            summary = pd.DataFrame(rows)
+            if not summary.empty:
+                show = summary.groupby("Region").agg(
+                    P95_sec=("p95_sec","mean"),
+                    Avg_sec=("avg_sec","mean"),
+                    Max_sec=("max_sec","max"),
+                    Error_Rate=("error_rate","mean"),
+                    SLA_Pass=("sla_compliance","mean"),
+                ).reset_index().round(2)
+                st.dataframe(show, use_container_width=True, hide_index=True, height=230)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        with c5:
+            st.markdown('<div class="panel"><div class="panel-title">PERFORMANCE HEATMAP (P95) <span class="tag">Track × Region</span></div>', unsafe_allow_html=True)
+            heat_rows = []
+            for frames in selected_frames:
+                region = frames.get("Region", region_from_frames(frames))
+                ts = track_summary(frames["APIs"])
+                ts["Region"] = region
+                heat_rows.append(ts)
+            heat = pd.concat(heat_rows, ignore_index=True) if heat_rows else pd.DataFrame()
+            if not heat.empty:
+                top_tracks = heat.groupby("Feature")["P95_Sec"].max().sort_values(ascending=False).head(8).index
+                heat = heat[heat["Feature"].isin(top_tracks)]
+                pivot = heat.pivot_table(index="Feature", columns="Region", values="P95_Sec", aggfunc="mean").fillna(0)
+                match = pivot.copy()
+                for track in match.index:
+                    for col in match.columns:
+                        match.loc[track, col] = sla_color_for_track(track, pivot.loc[track, col])
+                fig = px.imshow(
+                    match,
+                    text_auto=False,
+                    color_continuous_scale=[(0,"#ef4444"),(.499,"#ef4444"),(.5,"#22c55e"),(1,"#22c55e")],
+                    zmin=0,zmax=1,aspect="auto",
+                )
+                fig.update_traces(text=pivot.round(2).astype(str)+"s", texttemplate="%{text}")
+                fig.update_layout(height=310, margin=dict(l=8,r=8,t=8,b=8), coloraxis_showscale=False)
+                st.plotly_chart(fig, use_container_width=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        with c6:
+            st.markdown('<div class="panel"><div class="panel-title">P95 by Region</div>', unsafe_allow_html=True)
+            if not summary.empty:
+                fig = px.bar(show, x="Region", y="P95_sec", text="P95_sec", color="Region")
+                fig.update_traces(texttemplate="%{text:.2f}s", textposition="outside")
+                fig.update_layout(height=145, margin=dict(l=6,r=8,t=4,b=25), showlegend=False, xaxis_title="", yaxis_title="")
+                st.plotly_chart(fig, use_container_width=True)
+                fig2 = px.bar(show, x="Region", y="Error_Rate", text="Error_Rate", color="Region")
+                fig2.update_traces(texttemplate="%{text:.2f}%", textposition="outside")
+                fig2.update_layout(height=145, margin=dict(l=6,r=8,t=4,b=25), showlegend=False, xaxis_title="", yaxis_title="Err %")
+                st.plotly_chart(fig2, use_container_width=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown('<div class="panel"><div class="panel-title">TOP SLOW TRACKS DETAILS (P95 / AVG / MAX)</div>', unsafe_allow_html=True)
+        if not heat.empty:
+            # Region comparison style table.
+            table_rows = []
+            for feature in heat.groupby("Feature")["P95_Sec"].max().sort_values(ascending=False).head(8).index:
+                row = {"Track / Feature": feature}
+                subset = heat[heat["Feature"] == feature]
+                for _, r in subset.iterrows():
+                    reg = r["Region"]
+                    row[f"{reg} P95 (s)"] = r["P95_Sec"]
+                    row[f"{reg} Avg (s)"] = r["Avg_Sec"]
+                    row[f"{reg} Max (s)"] = r["Max_Sec"]
+                row["SLA Fail %"] = round(float(subset["SLA Fail %"].mean()),2)
+                row["Errors"] = int(subset["Errors"].sum())
+                table_rows.append(row)
+            detail = pd.DataFrame(table_rows)
+            st.dataframe(detail, use_container_width=True, hide_index=True, height=330)
+        else:
+            st.dataframe(tracks[["Feature","P95_Sec","Avg_Sec","Max_Sec","Errors","SLA Fail %"]].head(10), use_container_width=True, hide_index=True)
+        st.markdown('<div style="text-align:center;margin-top:5px;"><a class="mini-link">View all Tracks →</a></div>', unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
-
-
-
-def render_top_slow_tracks_details(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
-    combined_parts = []
-    for frames in run_frames:
-        tmp = frames["APIs"].copy()
-        tmp["Run"] = frames["Label"]
-        tmp["Region"] = frames.get("Region", region_from_frames(frames))
-        combined_parts.append(tmp)
-
-    df = pd.concat(combined_parts, ignore_index=True) if combined_parts else pd.DataFrame()
-    if df.empty:
-        return
-
-    tracks = track_summary(df)
-    if tracks.empty:
-        return
-
-    top_slow = tracks[["Feature", "Track Type", "P95_Sec", "Avg_Sec", "Max_Sec", "Errors", "SLA Fail %", "APIs", "Samples"]].head(15).rename(
-        columns={
-            "Feature": "Track",
-            "Track Type": "Type",
-            "P95_Sec": "95th Perc Sec",
-            "Avg_Sec": "Avg Sec",
-            "Max_Sec": "Max Response Sec",
-            "SLA Fail %": "SLA Fail %",
-        }
-    )
-
-    st.markdown('<div class="panel"><div class="panel-title blue-title">TOP SLOW TRACKS DETAILS (P95 / AVG / MAX)</div>', unsafe_allow_html=True)
-
-    fig = px.bar(
-        top_slow.sort_values("95th Perc Sec"),
-        x="95th Perc Sec",
-        y="Track",
-        orientation="h",
-        color="Type",
-        text="95th Perc Sec",
-        title="Top Slow Tracks by 95th Percentile",
-    )
-    fig.update_traces(texttemplate="%{text:.2f}s", textposition="outside")
-    fig.update_layout(
-        height=520,
-        margin=dict(l=10, r=30, t=45, b=25),
-        xaxis_title="95th Percentile Response Time (sec)",
-        yaxis_title="",
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-    st.dataframe(
-        top_slow,
-        use_container_width=True,
-        hide_index=True,
-        height=430,
-    )
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-
-def render_drilldown(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
-    st.subheader("🔍 Drilldown")
-    df = run_frames[-1]["APIs"]
-    f1, f2, f3 = st.columns([2, 2, 2])
-    tracks = sorted(df["Feature"].dropna().astype(str).unique().tolist())
-    selected_tracks = f1.multiselect("Tracks", tracks, default=tracks[: min(8, len(tracks))])
-    statuses = f2.multiselect("SLA Status", ["PASS", "FAIL"], default=["PASS", "FAIL"])
-    sort_by = f3.selectbox("Sort by", ["Avg ResTime in sec", "95thPercentile Resp Time in Sec", "MaxRes Time in sec", "errorCount", "sampleCount"])
-    filtered = df[df["Feature"].isin(selected_tracks) & df["SLA Status"].isin(statuses)].sort_values(sort_by, ascending=False)
-    cols = ["Feature", "Scenario", "Endpoint", "sampleCount", "errorCount", "errorPct", "Avg ResTime in sec", "95thPercentile Resp Time in Sec", "99thPercentile Resp Time in Sec", "MaxRes Time in sec", "SLA Sec", "SLA Status", "SLA Breach Sec"]
-    st.dataframe(filtered[safe_cols(filtered, cols)].head(500), use_container_width=True, hide_index=True)
 
 
 def standard_api_cols(df: pd.DataFrame) -> List[str]:
@@ -718,36 +720,27 @@ def standard_api_cols(df: pd.DataFrame) -> List[str]:
 
 def extract_top_n(question: str, default: int = 10) -> int:
     match = re.search(r"\btop\s+(\d+)|\bfirst\s+(\d+)|\b(\d+)\s+(?:slow|error|fail|api|apis)", question.lower())
-    if not match:
-        return default
-    nums = [g for g in match.groups() if g]
+    nums = [g for g in match.groups() if g] if match else []
     return max(1, min(100, int(nums[0]))) if nums else default
 
 
 def metric_col(question: str) -> str:
     q = question.lower()
-    if "p99" in q or "99" in q:
-        return "99thPercentile Resp Time in Sec"
-    if "p95" in q or "95" in q:
-        return "95thPercentile Resp Time in Sec"
-    if "p90" in q or "90" in q:
-        return "90thPercentile Resp Time in Sec"
-    if "max" in q or "maximum" in q:
-        return "MaxRes Time in sec"
-    if "min" in q or "minimum" in q:
-        return "Min ResTime in sec"
+    if "p99" in q or "99" in q: return "99thPercentile Resp Time in Sec"
+    if "p95" in q or "95" in q: return "95thPercentile Resp Time in Sec"
+    if "p90" in q or "90" in q: return "90thPercentile Resp Time in Sec"
+    if "max" in q or "maximum" in q: return "MaxRes Time in sec"
+    if "min" in q or "minimum" in q: return "Min ResTime in sec"
     return "Avg ResTime in sec"
 
 
 def match_rows(df: pd.DataFrame, question: str) -> pd.DataFrame:
-    if df.empty:
-        return df
+    if df.empty: return df
     q = question.lower()
-    searchable_cols = safe_cols(df, ["Feature", "Scenario", "Endpoint", "API", "SLA Status", "Track Type"])
-    stop = {"show", "give", "tell", "what", "which", "where", "when", "how", "the", "and", "or", "for", "api", "apis", "track", "tracks", "report", "details", "data", "list", "top", "bottom", "is", "are", "was", "were", "in", "of", "to", "me", "with", "on", "by", "about", "please"}
+    searchable_cols = safe_cols(df, ["Feature","Scenario","Endpoint","API","SLA Status","Track Type"])
+    stop = {"show","give","tell","what","which","where","when","how","the","and","or","for","api","apis","track","tracks","report","details","data","list","top","bottom","is","are","was","were","in","of","to","me","with","on","by","about","please"}
     tokens = [t for t in re.findall(r"[a-zA-Z0-9_./-]+", q) if len(t) >= 3 and t not in stop]
-    if not tokens or not searchable_cols:
-        return df.head(0)
+    if not tokens or not searchable_cols: return df.head(0)
     combined = pd.Series("", index=df.index, dtype=str)
     for col in searchable_cols:
         combined = combined + " " + df[col].astype(str).str.lower()
@@ -759,156 +752,125 @@ def match_rows(df: pd.DataFrame, question: str) -> pd.DataFrame:
 
 def chat_answer(question: str, run_frames: List[Dict[str, pd.DataFrame]]) -> Tuple[str, pd.DataFrame | None]:
     q = question.lower().strip()
-    if not run_frames:
-        return "Upload and generate a dashboard first.", None
-    df = run_frames[-1]["APIs"].copy()
-    label = run_frames[-1]["Label"]
+    if not run_frames: return "Upload and generate a dashboard first.", None
+    df = combined_df(run_frames)
+    label = "selected report(s)"
     n = extract_top_n(q)
     mcol = metric_col(q)
-
-    if any(w in q for w in ["context", "date", "duration", "region", "users", "devices", "concurrent"]):
+    if any(w in q for w in ["context","date","duration","region","users","devices","concurrent"]):
         rows = []
         for f in run_frames:
             info = f.get("Run_Info")
             if info is not None and not info.empty:
-                row = info.iloc[0].to_dict()
-                row["Run"] = f["Label"]
-                rows.append(row)
+                row = info.iloc[0].to_dict(); row["Run"] = f["Label"]; row["Region"] = f.get("Region", region_from_frames(f)); rows.append(row)
         if rows:
             context = pd.DataFrame(rows)
-            return "Report context extracted from uploaded filename(s).", context[safe_cols(context, ["Run", "Concurrent Users", "Devices Count", "Date", "Duration", "Region"])]
+            return "Report context extracted from uploaded filename(s).", context[safe_cols(context, ["Run","Region","Concurrent Users","Devices Count","Date","Duration"])]
         return "Report context was not available.", None
-
-    if any(w in q for w in ["compare", "comparison", "baseline", "regress", "regression", "delta", "difference"]):
-        if len(run_frames) < 2:
-            return "Comparison needs two or more uploaded JSON files.", None
-        if any(w in q for w in ["regress", "delta", "difference", "changed", "worse", "improve"]):
-            first_label = run_frames[0]["Label"]
-            last_label = run_frames[-1]["Label"]
-            first = run_frames[0]["APIs"][["API", "Feature", "Scenario", "Endpoint", "Avg ResTime in sec", "errorCount", "SLA Status"]]
-            last = run_frames[-1]["APIs"][["API", "Avg ResTime in sec", "errorCount", "SLA Status"]]
-            diff = first.merge(last, on="API", how="outer", suffixes=(f" ({first_label})", f" ({last_label})"))
-            diff["Avg Sec Delta"] = (pd.to_numeric(diff[f"Avg ResTime in sec ({last_label})"], errors="coerce") - pd.to_numeric(diff[f"Avg ResTime in sec ({first_label})"], errors="coerce")).round(2)
-            diff["Error Delta"] = (pd.to_numeric(diff[f"errorCount ({last_label})"], errors="coerce").fillna(0) - pd.to_numeric(diff[f"errorCount ({first_label})"], errors="coerce").fillna(0)).astype(int)
-            return "Latest vs baseline API comparison. Positive Avg Sec Delta means slower in latest run.", diff.sort_values(["Avg Sec Delta", "Error Delta"], ascending=False).head(n)
-        rows = []
-        for f in run_frames:
-            row = summarize_run(f["APIs"])
-            row["Run"] = f["Label"]
-            rows.append(row)
-        return "Run-level comparison summary.", pd.DataFrame(rows)
-
-    if any(w in q for w in ["health", "summary", "overall", "status", "executive", "overview"]):
+    if any(w in q for w in ["health","summary","overall","status","executive","overview"]):
         s = summarize_run(df)
         return f"Overall for **{label}**: Performance Score **{s['performance_score']}**, SLA Compliance **{s['sla_compliance']}%**, Success Rate **{s['success_rate']}%**, Error Rate **{s['error_rate']}%**, Avg Response **{s['avg_sec']} sec**, P95 **{s['p95_sec']} sec**, Errors **{s['errors']}**, Samples **{s['samples']}**.", None
-
-    if any(w in q for w in ["sla", "breach", "breached", "violate", "violation", "pass", "failed", "fail"]):
+    if any(w in q for w in ["sla","breach","breached","violate","violation","pass","failed","fail"]):
+        fail = df[df["SLA Status"] == "FAIL"].sort_values("SLA Breach Sec", ascending=False)
         if "pass" in q and "fail" not in q and "breach" not in q:
             ok = df[df["SLA Status"] == "PASS"].copy()
-            return f"APIs passing SLA for **{label}**.", ok[standard_api_cols(ok)].head(n)
-        fail = df[df["SLA Status"] == "FAIL"].sort_values("SLA Breach Sec", ascending=False)
-        if fail.empty:
-            return f"No SLA breaches found in **{label}**.", None
-        return f"Top {min(n, len(fail))} SLA breaches for **{label}**.", fail[standard_api_cols(fail)].head(n)
-
-    if any(w in q for w in ["error", "errors", "failure", "failures", "errorpct"]):
-        err = df[pd.to_numeric(df.get("errorCount", 0), errors="coerce").fillna(0) > 0].copy()
-        if err.empty:
-            return f"No API errors found in **{label}**.", None
+            return "APIs passing SLA.", ok[standard_api_cols(ok)].head(n)
+        if fail.empty: return "No SLA breaches found.", None
+        return f"Top {min(n,len(fail))} SLA breaches.", fail[standard_api_cols(fail)].head(n)
+    if any(w in q for w in ["error","errors","failure","failures","errorpct"]):
+        err = df[pd.to_numeric(df.get("errorCount",0), errors="coerce").fillna(0)>0].copy()
+        if err.empty: return "No API errors found.", None
         sort_col = "errorPct" if "percent" in q or "pct" in q else "errorCount"
-        return f"Top {min(n, len(err))} error APIs for **{label}** sorted by {sort_col}.", err.sort_values(sort_col, ascending=False)[standard_api_cols(err)].head(n)
-
-    if any(w in q for w in ["track", "tracks", "feature", "features"]):
+        return f"Top {min(n,len(err))} error APIs sorted by {sort_col}.", err.sort_values(sort_col, ascending=False)[standard_api_cols(err)].head(n)
+    if any(w in q for w in ["track","tracks","feature","features"]):
         ts = track_summary(df)
-        matched = match_rows(ts.rename(columns={"Feature": "API"}), question)
-        if not matched.empty:
-            return "Matching track summary rows.", matched.head(n)
-        return f"Worst tracks for **{label}** by P95, Avg Sec, and Errors.", ts.head(n)
-
-    if any(w in q for w in ["sample", "samples", "count", "volume", "load"]):
+        return "Worst tracks by P95, Avg Sec, and Errors.", ts.head(n)
+    if any(w in q for w in ["sample","samples","count","volume","load"]):
         sample_df = df.sort_values("sampleCount", ascending=False)
-        return f"Top {min(n, len(sample_df))} APIs by sample count for **{label}**.", sample_df[standard_api_cols(sample_df)].head(n)
-
-    if any(w in q for w in ["p90", "p95", "p99", "percentile", "90", "95", "99", "slow", "latency", "response", "time", "avg", "maximum", "minimum", "max", "min"]):
-        if mcol not in df.columns:
-            return f"{mcol} is not available in this report.", None
+        return f"Top {min(n,len(sample_df))} APIs by sample count.", sample_df[standard_api_cols(sample_df)].head(n)
+    if any(w in q for w in ["p90","p95","p99","percentile","90","95","99","slow","latency","response","time","avg","maximum","minimum","max","min"]):
+        if mcol not in df.columns: return f"{mcol} is not available.", None
         top = df.sort_values(mcol, ascending=False)
-        return f"Top {min(n, len(top))} APIs for **{label}** based on **{mcol}**.", top[standard_api_cols(top)].head(n)
-
+        return f"Top {min(n,len(top))} APIs based on **{mcol}**.", top[standard_api_cols(top)].head(n)
     matched = match_rows(df, question)
     if not matched.empty:
-        matched = matched.sort_values(["SLA Breach Sec", "Avg ResTime in sec", "errorCount"], ascending=False)
-        return f"I found {len(matched)} matching API rows. Showing most relevant rows.", matched[standard_api_cols(matched)].head(n)
-
-    return "I can answer questions like: top slow APIs, SLA breaches, top errors, worst tracks, P95/P99, samples, report context, compare runs, or keyword searches for an API/endpoint.", None
+        return f"I found {len(matched)} matching rows.", matched.sort_values(["SLA Breach Sec","Avg ResTime in sec","errorCount"], ascending=False)[standard_api_cols(matched)].head(n)
+    return "Ask me: top slow APIs, SLA breaches, top errors, worst tracks, P95/P99, samples, report context, compare runs, or keyword searches.", None
 
 
-st.markdown(f"<div class='dashboard-title'>{APP_TITLE}</div>", unsafe_allow_html=True)
-st.markdown("<div class='dashboard-subtitle'>Upload one JMeter <code>statistics.json</code> file for a normal dashboard. Upload two or more files for comparison.</div>", unsafe_allow_html=True)
+def render_chatbot(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
+    st.markdown('<div class="chat-card"><div class="chat-header">AI ASSISTANT</div>', unsafe_allow_html=True)
+    st.write("Hi! I can help you analyze the performance data.")
+    with st.expander("Try asking me", expanded=True):
+        st.write("- Top slow APIs in APJC\n- Why SLA failed?\n- Compare error rate by region\n- Worst performing tracks")
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            if msg.get("table") is not None:
+                st.dataframe(msg["table"], use_container_width=True, hide_index=True)
+    question = st.chat_input("Ask anything about performance...")
+    if question:
+        st.session_state.messages.append({"role":"user","content":question,"table":None})
+        answer, table = chat_answer(question, run_frames)
+        st.session_state.messages.append({"role":"assistant","content":answer,"table":table})
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
-st.markdown(
-    """
-<div class="rules-section">
-<h3>SLA Rules</h3>
-<ul>
-<li>AskAI APIs: SLA is &lt; 10 sec</li>
-<li>Assets, Assessments, Home, Settings and Support APIs: SLA is &lt; 2 sec</li>
-</ul>
-<h3>Track Comparison Metrics</h3>
-<ul>
-<li>AskAI tracks:
-<span class="metric-pill">0-10s</span>,
-<span class="metric-pill">10-20s</span>,
-<span class="metric-pill">20-30s</span>,
-<span class="metric-pill">&gt;30s</span>
-</li>
-<li>Assets, Assessments, Home, Settings and Support tracks:
-<span class="metric-pill">0-2s</span>,
-<span class="metric-pill">3-4s</span>,
-<span class="metric-pill">4-6s</span>,
-<span class="metric-pill">&gt;6s</span>
-</li>
-</ul>
+def render_main_page() -> None:
+    st.markdown(
+        f"""
+<div class="hero upload-card">
+  <h1>{APP_TITLE}</h1>
+  <p>Upload JMeter statistics JSON files and generate an executive-ready performance dashboard for US, EMEA, and APJC.</p>
+  <div class="hero-actions">
+    <span class="primary-pill">Executive Dashboard</span>
+    <span class="secondary-pill">Excel Report</span>
+    <span class="secondary-pill">AI Chatbot</span>
+    <span class="secondary-pill">Region Comparison</span>
+  </div>
 </div>
 """,
-    unsafe_allow_html=True,
-)
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+<div class="main-page-card upload-card">
+  <h3 style="margin-top:0;color:#0f2b68;">Upload performance report files</h3>
+  <p style="color:#667085;font-size:13px;margin-top:-4px;">Use filenames containing region and run details, for example <code>..._APJC_1Hour_April-19-2026_Report.json</code>.</p>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
 
 
-if dashboard_only:
-    uploaded_files = []
-else:
-    uploaded_files = st.file_uploader("Upload statistics.json file(s)", type=["json"], accept_multiple_files=True)
+# Session state
+if "excel_bytes" not in st.session_state: st.session_state.excel_bytes = None
+if "run_frames" not in st.session_state: st.session_state.run_frames = []
+if "report_file_name" not in st.session_state: st.session_state.report_file_name = "JMeter_Report.xlsx"
+if "messages" not in st.session_state: st.session_state.messages = []
+if "run_id" not in st.session_state: st.session_state.run_id = ""
 
-if "excel_bytes" not in st.session_state:
-    st.session_state.excel_bytes = None
-if "run_frames" not in st.session_state:
-    st.session_state.run_frames = []
-if "report_file_name" not in st.session_state:
-    st.session_state.report_file_name = "JMeter_Report.xlsx"
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "run_id" not in st.session_state:
-    st.session_state.run_id = ""
-
-# Load dashboard data from generated report when opened in new tab.
 if dashboard_only and run_id and run_id in dashboard_store:
     st.session_state.run_frames = dashboard_store[run_id]["run_frames"]
     st.session_state.excel_bytes = dashboard_store[run_id].get("excel_bytes")
     st.session_state.report_file_name = dashboard_store[run_id].get("report_file_name", "JMeter_Report.xlsx")
 
-if not dashboard_only:
-    generate_clicked = st.button("Generate Tableau Dashboard + Excel Report", type="primary", disabled=not uploaded_files)
-
+if dashboard_only:
+    if st.session_state.run_frames:
+        render_executive_dashboard(st.session_state.run_frames)
+    else:
+        st.warning("No dashboard data found for this tab. Please generate the report from the main page and click Open Dashboard in New Tab again.")
+else:
+    render_main_page()
+    uploaded_files = st.file_uploader("Upload statistics.json file(s)", type=["json"], accept_multiple_files=True)
+    generate_clicked = st.button("Generate Executive Dashboard + Excel Report", type="primary", disabled=not uploaded_files)
     if uploaded_files and generate_clicked:
-        import uuid
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
             json_paths: List[Path] = []
             labels: List[str] = []
             run_frames: List[Dict[str, pd.DataFrame]] = []
-
             for idx, uploaded_file in enumerate(uploaded_files, start=1):
                 clean_name = uploaded_file.name.replace(" ", "_")
                 path = tmpdir / f"{idx}_{clean_name}"
@@ -917,83 +879,39 @@ if not dashboard_only:
                 label = Path(uploaded_file.name).stem
                 labels.append(label)
                 run_frames.append(process_uploaded_file(path, label))
-
             output_path = tmpdir / "JMeter_Report.xlsx"
-
             try:
                 if len(json_paths) == 1:
                     build_report(json_paths[0], output_path)
-                    st.success("Report generated successfully.")
                 else:
                     build_comparison_report(json_paths, labels, output_path)
-                    st.success("Comparison report generated successfully.")
-
                 run_frames = add_region_to_frames(run_frames)
                 excel_bytes = output_path.read_bytes()
                 new_run_id = uuid.uuid4().hex
-                dashboard_store[new_run_id] = {
-                    "run_frames": run_frames,
-                    "excel_bytes": excel_bytes,
-                    "report_file_name": "JMeter_Report.xlsx",
-                }
-
+                dashboard_store[new_run_id] = {"run_frames": run_frames, "excel_bytes": excel_bytes, "report_file_name": "JMeter_Report.xlsx"}
                 st.session_state.excel_bytes = excel_bytes
                 st.session_state.run_frames = run_frames
                 st.session_state.report_file_name = "JMeter_Report.xlsx"
                 st.session_state.messages = []
                 st.session_state.run_id = new_run_id
+                st.success("Executive dashboard and Excel report generated successfully.")
             except Exception as exc:
                 st.error(f"Failed to generate report: {exc}")
 
     if st.session_state.excel_bytes:
-        st.download_button(
-            label="Download Excel Report",
-            data=st.session_state.excel_bytes,
-            file_name=st.session_state.report_file_name,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-        render_open_new_tab_button(st.session_state.run_id)
-
-    if st.session_state.run_frames:
-        st.info("Dashboard is ready. Click **Open Dashboard in New Tab ↗** to view the metrics dashboard.")
-
-if dashboard_only:
-    if st.session_state.run_frames:
-        main_col, chat_col = st.columns([3.2, 1.05])
-        with main_col:
-            selected_frames = get_dashboard_filtered_frames(st.session_state.run_frames)
-            render_tableau_dashboard(selected_frames)
-            render_top_slow_tracks_details(selected_frames)
-            render_region_comparison(selected_frames)
-            render_drilldown(selected_frames)
-
-        with chat_col:
-            st.markdown('<div class="chat-panel">', unsafe_allow_html=True)
-            st.subheader("🤖 Chatbot")
-            with st.expander("Example questions", expanded=False):
-                st.write(
-                    "- What are the top slow APIs?\n"
-                    "- Which APIs are breaching SLA?\n"
-                    "- Show top error APIs\n"
-                    "- Which tracks are worst?\n"
-                    "- Give overall health summary\n"
-                    "- Compare runs\n"
-                    "- Show regression\n"
-                    "- What is the report date and duration?"
-                )
-
-            for msg in st.session_state.messages:
-                with st.chat_message(msg["role"]):
-                    st.markdown(msg["content"])
-                    if msg.get("table") is not None:
-                        st.dataframe(msg["table"], use_container_width=True, hide_index=True)
-
-            question = st.chat_input("Ask report question...")
-            if question:
-                st.session_state.messages.append({"role": "user", "content": question, "table": None})
-                answer, table = chat_answer(question, st.session_state.run_frames)
-                st.session_state.messages.append({"role": "assistant", "content": answer, "table": table})
-                st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-    else:
-        st.warning("No dashboard data found for this tab. Please generate the report from the main page and click Open Dashboard in New Tab again.")
+        c1, c2 = st.columns([1,1])
+        with c1:
+            st.download_button("Download Excel Report", data=st.session_state.excel_bytes, file_name=st.session_state.report_file_name, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        with c2:
+            url = f"?view=dashboard&run_id={st.session_state.run_id}"
+            components.html(
+                f"""
+                <div style="text-align:left;">
+                  <button onclick="window.open('{url}', '_blank')" style="background:linear-gradient(90deg,#4f46e5,#2563eb);color:white;padding:10px 16px;border:0;border-radius:12px;font-weight:800;cursor:pointer;box-shadow:0 10px 22px rgba(37,99,235,.22);">
+                    Open Dashboard in New Tab ↗
+                  </button>
+                </div>
+                """,
+                height=50,
+            )
+        st.info("Dashboard metrics are shown only in the new dashboard tab, not on this upload page.")
