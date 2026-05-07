@@ -72,13 +72,13 @@ st.markdown(
     linear-gradient(135deg,#07132f 0%, #0a1b3f 50%, #0f2b68 100%);
   color:white;
   border-radius: 18px;
-  padding: 26px 28px;
+  padding: 22px 28px;
   box-shadow: 0 14px 32px rgba(7,19,47,.18);
   margin-bottom: 18px;
 }
 .hero h1 {
   margin: 0;
-  font-size: 30px;
+  font-size: 26px;
   line-height: 1.15;
   font-weight: 850;
   letter-spacing:-.4px;
@@ -286,7 +286,7 @@ st.markdown(
   border-radius: 12px;
 }
 .upload-card {
-  max-width: 980px;
+  max-width: 1120px;
   margin: 0 auto;
 }
 .main-page-card {
@@ -460,6 +460,7 @@ def combined_df(run_frames: List[Dict[str, pd.DataFrame]]) -> pd.DataFrame:
 
 
 
+
 def top_nav() -> str:
     st.markdown(
         """
@@ -477,14 +478,22 @@ def top_nav() -> str:
         unsafe_allow_html=True,
     )
 
-    if "nav_tab" not in st.session_state:
-        st.session_state.nav_tab = "Overview"
+    tabs = ["Overview", "Compare", "Trends", "Drilldown", "Reports", "Chatbot"]
+
+    # If a "View all..." button requested a tab switch, use it as the next radio default.
+    if "nav_target" in st.session_state:
+        requested = st.session_state.pop("nav_target")
+        st.session_state["nav_tab_radio"] = requested
+
+    current = st.session_state.get("nav_tab_radio", "Overview")
+    index = tabs.index(current) if current in tabs else 0
 
     return st.radio(
         "Dashboard Navigation",
-        ["Overview", "Compare", "Trends", "Drilldown", "Reports", "Chatbot"],
+        tabs,
         horizontal=True,
-        key="nav_tab",
+        index=index,
+        key="nav_tab_radio",
         label_visibility="collapsed",
     )
 
@@ -653,13 +662,13 @@ def render_compare_tab(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
     else:
         askai_df, other_df = build_dashboard_track_comparison(run_frames)
 
-        st.markdown("### AskAI Tracks")
+        st.markdown("### AskAI Tracks — 0-10s / 10-20s / 20-30s / >30s")
         if not askai_df.empty:
             st.dataframe(askai_df, use_container_width=True, hide_index=True, height=360)
         else:
             st.info("No AskAI tracks found.")
 
-        st.markdown("### Assets / Assessments / Home / Settings / Support Tracks")
+        st.markdown("### Assets / Assessments / Home / Settings / Support Tracks — 0-2s / 3-4s / 4-6s / >6s")
         if not other_df.empty:
             st.dataframe(other_df, use_container_width=True, hide_index=True, height=520)
         else:
@@ -713,14 +722,16 @@ def render_reports_tab() -> None:
             data=st.session_state.excel_bytes,
             file_name=st.session_state.report_file_name,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="reports_tab_excel_download",
         )
     st.markdown("</div>", unsafe_allow_html=True)
 
 
 def goto_tab_button(label: str, tab_name: str, key: str) -> None:
     if st.button(label, key=key):
-        st.session_state.nav_tab = tab_name
+        st.session_state["nav_target"] = tab_name
         st.rerun()
+
 
 
 def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
@@ -979,7 +990,7 @@ def render_chatbot(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
     st.markdown('<div class="chat-card"><div class="chat-header">AI ASSISTANT</div>', unsafe_allow_html=True)
     st.write("Hi! I can help you analyze the performance data.")
     with st.expander("Try asking me", expanded=True):
-        st.write("- Top slow APIs in APJC\n- Why SLA failed?\n- Compare error rate by region\n- Worst performing tracks\n- What changed between runs?\n- Which APIs have highest P99?\n- Show AskAI SLA breaches\n- Which track has most errors?")
+        st.write("- Top slow APIs in APJC\n- Why SLA failed?\n- Compare error rate by region\n- Worst performing tracks\n- What changed between runs?\n- Which APIs have highest P99?\n- Show AskAI SLA breaches\n- Which track has most errors?\n- Show highest sample count APIs\n- What is report date and duration?")
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
@@ -999,10 +1010,9 @@ def render_main_page() -> None:
         f"""
 <div class="hero upload-card">
   <h1>{APP_TITLE}</h1>
-  <p>Upload JMeter statistics JSON files and generate an executive-ready performance dashboard for US, EMEA, and APJC.</p>
+  <p>Upload JMeter JSON files and generate an executive-ready dashboard and Excel report.</p>
   <div class="hero-actions">
-    <span class="primary-pill">Upload JSON → Generate Report → Open Dashboard</span>
-    <span class="secondary-pill">Excel + Dashboard + Chatbot Included</span>
+    <span class="primary-pill">Upload JSON → Generate Report</span>
   </div>
 </div>
 """,
@@ -1027,35 +1037,32 @@ def dashboard_url_for_run(run_id_value: str) -> str:
     return f"?view=dashboard&run_id={run_id_value}"
 
 
+
 def render_action_cards() -> None:
     if not st.session_state.get("run_id"):
         return
 
     run_id_value = st.session_state.run_id
+    dashboard_href = f"?view=dashboard&run_id={run_id_value}"
 
     st.markdown(
         """
 <style>
-.action-card-row {
-    display:grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-    margin: 18px 0 14px 0;
-}
-.action-card {
+.action-card-box {
     background:#ffffff;
     border:1px solid #dbe4f0;
     border-radius:18px;
     padding:18px;
-    min-height:150px;
+    min-height:168px;
     box-shadow:0 10px 26px rgba(15,23,42,.06);
+    margin-bottom: 8px;
 }
-.action-card h3 {
+.action-card-box h3 {
     margin:0 0 8px 0;
     color:#0f2b68;
     font-size:19px;
 }
-.action-card p {
+.action-card-box p {
     margin:0 0 14px 0;
     color:#667085;
     font-size:13px;
@@ -1072,34 +1079,57 @@ def render_action_cards() -> None:
     font-size:13px;
     box-shadow:0 10px 22px rgba(37,99,235,.22);
 }
-.action-link.green {
-    background:linear-gradient(90deg,#137333,#0b8043);
-}
 .action-link.purple {
     background:linear-gradient(90deg,#6d28d9,#7c3aed);
 }
-@media(max-width:900px){.action-card-row{grid-template-columns:1fr;}}
 </style>
-<div class="action-card-row">
-  <div class="action-card">
-    <h3>Executive Dashboard</h3>
-    <p>Open the leadership-ready dashboard with KPIs, region comparison, heatmaps and drilldowns.</p>
-    <a class="action-link" href="?view=dashboard&run_id=%s" target="_blank">Open Dashboard ↗</a>
-  </div>
-  <div class="action-card">
-    <h3>Excel Report</h3>
-    <p>Download the generated workbook with Insights, APIs, Transactions, Errors and Comparison sheets.</p>
-    <span style="color:#667085;font-size:13px;">Use the download button below.</span>
-  </div>
-  <div class="action-card">
-    <h3>AI Chatbot</h3>
-    <p>Ask report questions about SLA, errors, slow APIs, tracks, regions and comparisons.</p>
-    <a class="action-link purple" href="?view=dashboard&run_id=%s" target="_blank">Open Chatbot ↗</a>
-  </div>
-</div>
-""" % (run_id_value, run_id_value),
+""",
         unsafe_allow_html=True,
     )
+
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+        st.markdown(
+            f"""
+<div class="action-card-box">
+  <h3>Executive Dashboard</h3>
+  <p>Open the leadership-ready dashboard with KPIs, region comparison, heatmaps and drilldowns.</p>
+  <a class="action-link" href="{dashboard_href}" target="_blank">Open Dashboard ↗</a>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
+    with c2:
+        st.markdown(
+            """
+<div class="action-card-box">
+  <h3>Excel Report</h3>
+  <p>Download the generated workbook with Insights, APIs, Transactions, Errors and Comparison sheets.</p>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+        st.download_button(
+            "Download Excel Report",
+            data=st.session_state.excel_bytes,
+            file_name=st.session_state.report_file_name,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="excel_download_card",
+        )
+
+    with c3:
+        st.markdown(
+            f"""
+<div class="action-card-box">
+  <h3>AI Chatbot</h3>
+  <p>Open the dashboard chatbot and ask questions about SLA, slow APIs, errors, regions and comparisons.</p>
+  <a class="action-link purple" href="{dashboard_href}" target="_blank">Open Chatbot ↗</a>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
 
 
 
@@ -1123,7 +1153,7 @@ if dashboard_only:
 else:
     render_main_page()
     uploaded_files = st.file_uploader("Upload statistics.json file(s)", type=["json"], accept_multiple_files=True)
-    generate_clicked = st.button("Generate Executive Dashboard + Excel Report", type="primary", disabled=not uploaded_files)
+    generate_clicked = st.button("Generate Report", type="primary", disabled=not uploaded_files)
     if uploaded_files and generate_clicked:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
@@ -1159,11 +1189,3 @@ else:
 
     if st.session_state.excel_bytes:
         render_action_cards()
-        st.download_button(
-            "Download Excel Report",
-            data=st.session_state.excel_bytes,
-            file_name=st.session_state.report_file_name,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-        
-        
