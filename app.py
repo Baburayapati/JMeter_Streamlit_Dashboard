@@ -738,29 +738,121 @@ def top_nav() -> str:
 
 
 
+
 def kpi_cards(df: pd.DataFrame) -> None:
     s = summarize_run(df)
     sla_fail = round(100 - s["sla_compliance"], 2) if s["transactions"] else 0
 
-    # Small static sparkline to match the executive summary visual.
-    spark = """
-    <svg class="agg-spark" viewBox="0 0 130 28" xmlns="http://www.w3.org/2000/svg">
-      <polyline points="2,20 16,19 29,20 42,17 55,18 68,11 81,16 94,18 107,9 124,14 129,8"
-        fill="none" stroke="#22a447" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-    """
-
     html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body {{
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: transparent;
+}}
+.agg-summary-card {{
+    background:#ffffff;
+    border:1px solid #dbe4f0;
+    border-radius:14px;
+    padding:0 0 12px 0;
+    box-shadow:0 8px 22px rgba(15,23,42,.045);
+}}
+.agg-summary-title {{
+    display:inline-block;
+    background:linear-gradient(90deg,#2333a3,#3152d9);
+    color:#ffffff;
+    padding:9px 18px;
+    border-radius:12px 12px 12px 0;
+    font-size:15px;
+    font-weight:900;
+    letter-spacing:.2px;
+    margin:0 0 8px 0;
+}}
+.agg-kpi-row {{
+    display:grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap:0;
+    padding:10px 16px 0 16px;
+}}
+.agg-kpi {{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    min-height:92px;
+    padding:10px 18px;
+    border-right:1px solid #e5edf7;
+}}
+.agg-kpi:last-child {{
+    border-right:none;
+}}
+.agg-icon {{
+    width:44px;
+    height:44px;
+    border-radius:10px;
+    color:#fff;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:23px;
+    font-weight:900;
+    box-shadow:0 10px 20px rgba(15,23,42,.16);
+    flex:0 0 44px;
+}}
+.agg-label {{
+    font-size:13px;
+    font-weight:850;
+    color:#111827;
+    margin-bottom:8px;
+}}
+.agg-value {{
+    font-size:28px;
+    font-weight:900;
+    color:#111827;
+    line-height:1.0;
+    letter-spacing:-.4px;
+}}
+.agg-suffix {{
+    font-size:13px;
+    color:#667085;
+    font-weight:650;
+    margin-left:5px;
+}}
+.agg-delta {{
+    font-size:12px;
+    margin-top:10px;
+    color:#667085;
+    font-weight:650;
+}}
+.agg-delta.good {{ color:#15803d; }}
+.agg-delta.bad {{ color:#ef4444; }}
+.agg-spark {{
+    width:132px;
+    height:28px;
+    margin-top:9px;
+}}
+@media(max-width:1100px){{
+  .agg-kpi-row {{ grid-template-columns: repeat(2, 1fr); }}
+  .agg-kpi:nth-child(2n){{border-right:none;}}
+}}
+</style>
+</head>
+<body>
 <div class="agg-summary-card">
   <div class="agg-summary-title">AGGREGATED PERFORMANCE OVERVIEW METRICS</div>
   <div class="agg-kpi-row">
 
     <div class="agg-kpi">
-      <div class="agg-icon" style="background:linear-gradient(135deg,#2563eb,#4f46e5);">🛡️</div>
+      <div class="agg-icon" style="background:linear-gradient(135deg,#2563eb,#4f46e5);">🛡</div>
       <div>
         <div class="agg-label">Health Score</div>
         <div class="agg-value">{s['performance_score']}<span class="agg-suffix">/100</span></div>
-        {spark}
+        <svg class="agg-spark" viewBox="0 0 130 28" xmlns="http://www.w3.org/2000/svg">
+          <polyline points="2,20 16,19 29,20 42,17 55,18 68,11 81,16 94,18 107,9 124,14 129,8"
+            fill="none" stroke="#22a447" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
       </div>
     </div>
 
@@ -811,8 +903,10 @@ def kpi_cards(df: pd.DataFrame) -> None:
 
   </div>
 </div>
+</body>
+</html>
 """
-    st.markdown(html, unsafe_allow_html=True)
+    components.html(html, height=150, scrolling=False)
 
 
 def sla_donut(df: pd.DataFrame):
