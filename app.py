@@ -718,9 +718,14 @@ def top_nav() -> str:
         "💬 Chatbot": "Chatbot",
     }
 
+    reverse_map = {v: k for k, v in tab_map.items()}
+
+    requested_from_url = params.get("tab", "")
+    if requested_from_url in reverse_map:
+        st.session_state["nav_tab_radio"] = reverse_map[requested_from_url]
+
     if "nav_target" in st.session_state:
         requested = st.session_state.pop("nav_target")
-        reverse_map = {v: k for k, v in tab_map.items()}
         st.session_state["nav_tab_radio"] = reverse_map.get(requested, "🏠 Overview")
 
     current = st.session_state.get("nav_tab_radio", "🏠 Overview")
@@ -1144,14 +1149,14 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
         goto_tab_button('View all Insights →', 'Trends', 'view_insights_btn')
         st.markdown("</div>", unsafe_allow_html=True)
 
-        render_chatbot(selected_frames, key_suffix='tab')
+        render_chatbot(selected_frames, key_suffix='side')
 
         try:
             dashboard_url = st.secrets.get("DASHBOARD_URL", "")
         except Exception:
             dashboard_url = ""
         if dashboard_url:
-            st.markdown(f'<a class="primary-pill" href="{dashboard_url}?view=dashboard" target="_blank" style="width:100%;text-align:center;">Open Dashboard in New Tab ↗</a>', unsafe_allow_html=True)
+            st.markdown(f'<a class="primary-pill" href="{dashboard_url}?view=dashboard&tab=Overview" target="_blank" style="width:100%;text-align:center;">Open Dashboard in New Tab ↗</a>', unsafe_allow_html=True)
 
     with main_col:
         df = combined_df(selected_frames)
@@ -1392,7 +1397,7 @@ def render_chatbot(run_frames: List[Dict[str, pd.DataFrame]], key_suffix: str = 
             st.markdown(msg["content"])
             if msg.get("table") is not None:
                 st.dataframe(msg["table"], use_container_width=True, hide_index=True)
-    question = st.chat_input("Ask anything about performance...", key=f"chat_input_{key_suffix}")
+    question = st.chat_input("Ask anything about performance...", key=f"chat_input_{key_suffix}_{st.session_state.get('run_id', 'no_run')}")
     if question:
         st.session_state.messages.append({"role":"user","content":question,"table":None})
         answer, table = chat_answer(question, run_frames)
@@ -1429,7 +1434,8 @@ def dashboard_url_for_run(run_id_value: str) -> str:
 def render_action_cards() -> None:
     has_report = bool(st.session_state.get("run_id") and st.session_state.get("excel_bytes"))
     run_id_value = st.session_state.get("run_id", "")
-    dashboard_href = f"?view=dashboard&run_id={run_id_value}" if has_report else "#"
+    dashboard_href = f"?view=dashboard&run_id={run_id_value}&tab=Overview" if has_report else "#"
+    chatbot_href = f"?view=dashboard&run_id={run_id_value}&tab=Chatbot" if has_report else "#"
 
     st.markdown(
         """
@@ -1502,7 +1508,7 @@ def render_action_cards() -> None:
             st.markdown('<div class="action-card-title">AI Chatbot</div>', unsafe_allow_html=True)
             st.markdown('<div class="action-card-text">Open the dashboard chatbot and ask questions about SLA, slow APIs, errors, regions and comparisons.</div>', unsafe_allow_html=True)
             link_class = "action-link purple" if has_report else "action-link disabled"
-            st.markdown(f'<a class="{link_class}" href="{dashboard_href}" target="_blank">Open Chatbot ↗</a>', unsafe_allow_html=True)
+            st.markdown(f'<a class="{link_class}" href="{chatbot_href}" target="_blank">Open Chatbot ↗</a>', unsafe_allow_html=True)
 
 
 
