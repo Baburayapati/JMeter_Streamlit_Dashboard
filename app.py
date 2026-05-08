@@ -244,6 +244,21 @@ div[role="radiogroup"] label:has(input:checked) {
   .agg-kpi:nth-child(2n){border-right:none;}
 }
 
+
+/* v66 clickable top dashboard buttons */
+.nav-button-row {
+    background:#ffffff;
+    border:1px solid #dbe4f0;
+    border-radius:14px;
+    padding:10px;
+    margin-bottom:14px;
+    box-shadow:0 8px 20px rgba(15,23,42,.045);
+}
+.nav-button-row + div button, .stButton > button {
+    border-radius:12px !important;
+    font-weight:800 !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -691,6 +706,7 @@ def combined_df(run_frames: List[Dict[str, pd.DataFrame]]) -> pd.DataFrame:
 
 
 
+
 def top_nav() -> str:
     st.markdown(
         """
@@ -708,40 +724,36 @@ def top_nav() -> str:
         unsafe_allow_html=True,
     )
 
-    tabs = ["🏠 Overview", "📊 Compare", "📈 Trends", "🔎 Drilldown", "📄 Reports", "💬 Chatbot"]
-    tab_map = {
-        "🏠 Overview": "Overview",
-        "📊 Compare": "Compare",
-        "📈 Trends": "Trends",
-        "🔎 Drilldown": "Drilldown",
-        "📄 Reports": "Reports",
-        "💬 Chatbot": "Chatbot",
-    }
-
-    reverse_map = {v: k for k, v in tab_map.items()}
+    tabs = [
+        ("Overview", "🏠 Overview"),
+        ("Compare", "📊 Compare"),
+        ("Trends", "📈 Trends"),
+        ("Drilldown", "🔎 Drilldown"),
+        ("Reports", "📄 Reports"),
+        ("Chatbot", "💬 Chatbot"),
+    ]
 
     requested_from_url = params.get("tab", "")
-    if requested_from_url in reverse_map:
-        st.session_state["nav_tab_radio"] = reverse_map[requested_from_url]
+    if requested_from_url in [t[0] for t in tabs]:
+        st.session_state["dashboard_tab"] = requested_from_url
 
     if "nav_target" in st.session_state:
-        requested = st.session_state.pop("nav_target")
-        st.session_state["nav_tab_radio"] = reverse_map.get(requested, "🏠 Overview")
+        st.session_state["dashboard_tab"] = st.session_state.pop("nav_target")
 
-    current = st.session_state.get("nav_tab_radio", "🏠 Overview")
-    index = tabs.index(current) if current in tabs else 0
+    if "dashboard_tab" not in st.session_state:
+        st.session_state["dashboard_tab"] = "Overview"
 
-    selected = st.radio(
-        "Dashboard Navigation",
-        tabs,
-        horizontal=True,
-        index=index,
-        key="nav_tab_radio",
-        label_visibility="collapsed",
-    )
-    return tab_map[selected]
+    st.markdown('<div class="nav-button-row">', unsafe_allow_html=True)
+    cols = st.columns(len(tabs))
+    for col, (tab_value, tab_label) in zip(cols, tabs):
+        with col:
+            button_type = "primary" if st.session_state["dashboard_tab"] == tab_value else "secondary"
+            if st.button(tab_label, key=f"top_nav_{tab_value}", use_container_width=True, type=button_type):
+                st.session_state["dashboard_tab"] = tab_value
+                st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
-
+    return st.session_state["dashboard_tab"]
 
 
 def kpi_cards(df: pd.DataFrame) -> None:
@@ -985,7 +997,7 @@ def auto_insights(run_frames: List[Dict[str, pd.DataFrame]]) -> List[Tuple[str, 
         worst_track = tracks.iloc[0]
         result.append(("⚠", "#f59e0b", f"{worst_track['Feature']} is top contributor for P95 latency at {worst_track['P95_Sec']}s."))
     result.append(("i", "#2563eb", f"Overall SLA compliance is {s['sla_compliance']}% with {s['errors']:,} errors."))
-    return result[:4]
+    return result[:5]
 
 
 
@@ -1065,15 +1077,12 @@ def render_compare_tab(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
         if not askai_df.empty:
             st.dataframe(askai_df, use_container_width=True, hide_index=True, height=360)
         else:
-            st.button("⬇ Download Excel Report", disabled=True, use_container_width=True, key="excel_disabled_btn")
-            st.button("⬇ Download Excel Report", disabled=True, use_container_width=True, key="excel_disabled_btn")
             st.info("No AskAI tracks found.")
 
         st.markdown("### Assets / Assessments / Home / Settings / Support Tracks — 0-2s / 3-4s / 4-6s / >6s")
         if not other_df.empty:
             st.dataframe(other_df, use_container_width=True, hide_index=True, height=520)
         else:
-            st.button("⬇ Download Excel Report", disabled=True, use_container_width=True, key="excel_disabled_btn")
             st.info("No non-AskAI tracks found.")
 
     st.markdown("</div>", unsafe_allow_html=True)
@@ -1218,9 +1227,9 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
             goto_tab_button('View all Errors →', 'Drilldown', 'view_all_errors_btn')
             st.markdown("</div>", unsafe_allow_html=True)
 
-        c4, c5, c6 = st.columns([1.05, 1.0, .75], gap="medium")
+        c4, c5 = st.columns([1.05, 1.45], gap="medium")
         with c4:
-            st.markdown('<div class="panel"><div class="panel-title">REGION COMPARISON (P95)</div>', unsafe_allow_html=True)
+            st.markdown('<div class="panel"><div class="panel-title">REGION COMPARISON</div>', unsafe_allow_html=True)
             rows = []
             for frames in selected_frames:
                 row = summarize_run(frames["APIs"])
@@ -1235,11 +1244,11 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
                     Error_Rate=("error_rate","mean"),
                     SLA_Pass=("sla_compliance","mean"),
                 ).reset_index().round(2)
-                st.dataframe(show, use_container_width=True, hide_index=True, height=230)
+                st.dataframe(show, use_container_width=True, hide_index=True, height=300)
             st.markdown("</div>", unsafe_allow_html=True)
 
         with c5:
-            st.markdown('<div class="panel"><div class="panel-title">PERFORMANCE HEATMAP (P95) <span class="tag">Track × Region</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="panel"><div class="panel-title">PERFORMANCE HEATMAP <span class="tag">Track × Region</span></div>', unsafe_allow_html=True)
             heat_rows = []
             for frames in selected_frames:
                 region = frames.get("Region", region_from_frames(frames))
@@ -1248,7 +1257,7 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
                 heat_rows.append(ts)
             heat = pd.concat(heat_rows, ignore_index=True) if heat_rows else pd.DataFrame()
             if not heat.empty:
-                top_tracks = heat.groupby("Feature")["P95_Sec"].max().sort_values(ascending=False).head(8).index
+                top_tracks = heat.groupby("Feature")["P95_Sec"].max().sort_values(ascending=False).head(10).index
                 heat = heat[heat["Feature"].isin(top_tracks)]
                 pivot = heat.pivot_table(index="Feature", columns="Region", values="P95_Sec", aggfunc="mean").fillna(0)
                 match = pivot.copy()
@@ -1262,44 +1271,22 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
                     zmin=0,zmax=1,aspect="auto",
                 )
                 fig.update_traces(text=pivot.round(2).astype(str)+"s", texttemplate="%{text}")
-                fig.update_layout(height=310, margin=dict(l=8,r=8,t=8,b=8), coloraxis_showscale=False)
+                fig.update_layout(height=430, margin=dict(l=8,r=8,t=8,b=8), coloraxis_showscale=False)
                 st.plotly_chart(fig, use_container_width=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
-        with c6:
-            st.markdown('<div class="panel"><div class="panel-title">P95 by Region</div>', unsafe_allow_html=True)
-            if not summary.empty:
-                fig = px.bar(show, x="Region", y="P95_sec", text="P95_sec", color="Region")
-                fig.update_traces(texttemplate="%{text:.2f}s", textposition="outside")
-                fig.update_layout(height=145, margin=dict(l=6,r=8,t=4,b=25), showlegend=False, xaxis_title="", yaxis_title="")
-                st.plotly_chart(fig, use_container_width=True)
-                fig2 = px.bar(show, x="Region", y="Error_Rate", text="Error_Rate", color="Region")
-                fig2.update_traces(texttemplate="%{text:.2f}%", textposition="outside")
-                fig2.update_layout(height=145, margin=dict(l=6,r=8,t=4,b=25), showlegend=False, xaxis_title="", yaxis_title="Err %")
-                st.plotly_chart(fig2, use_container_width=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        st.markdown('<div class="panel"><div class="panel-title">TOP SLOW TRACKS DETAILS (P95 / AVG / MAX)</div>', unsafe_allow_html=True)
-        if not heat.empty:
-            # Region comparison style table.
-            table_rows = []
-            for feature in heat.groupby("Feature")["P95_Sec"].max().sort_values(ascending=False).head(8).index:
-                row = {"Track / Feature": feature}
-                subset = heat[heat["Feature"] == feature]
-                for _, r in subset.iterrows():
-                    reg = r["Region"]
-                    row[f"{reg} P95 (s)"] = r["P95_Sec"]
-                    row[f"{reg} Avg (s)"] = r["Avg_Sec"]
-                    row[f"{reg} Max (s)"] = r["Max_Sec"]
-                row["SLA Fail %"] = round(float(subset["SLA Fail %"].mean()),2)
-                row["Errors"] = int(subset["Errors"].sum())
-                table_rows.append(row)
-            detail = pd.DataFrame(table_rows)
-            st.dataframe(detail, use_container_width=True, hide_index=True, height=330)
+        st.markdown('<div class="panel"><div class="panel-title">TRACK COMPARISON SUMMARY <span class="tag">Same bucket logic as Excel Track_Comparison</span></div>', unsafe_allow_html=True)
+        askai_compare, other_compare = build_dashboard_track_comparison(selected_frames)
+        if len(selected_frames) < 2:
+            st.info("Upload two or more reports to compare tracks side by side.")
         else:
-            st.button("⬇ Download Excel Report", disabled=True, use_container_width=True, key="excel_disabled_btn")
-            st.dataframe(tracks[["Feature","P95_Sec","Avg_Sec","Max_Sec","Errors","SLA Fail %"]].head(10), use_container_width=True, hide_index=True)
-        goto_tab_button('View all Tracks →', 'Compare', 'view_all_tracks_btn')
+            if not askai_compare.empty:
+                st.markdown("#### AskAI Tracks")
+                st.dataframe(askai_compare, use_container_width=True, hide_index=True, height=360)
+            if not other_compare.empty:
+                st.markdown("#### Assets / Assessments / Home / Settings / Support Tracks")
+                st.dataframe(other_compare, use_container_width=True, hide_index=True, height=520)
+        goto_tab_button('Open Full Track Comparison →', 'Compare', 'overview_full_compare_btn')
         st.markdown("</div>", unsafe_allow_html=True)
 
 
