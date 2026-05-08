@@ -156,6 +156,94 @@ div[role="radiogroup"] label:has(input:checked) {
     padding:0 18px 12px 18px;
 }
 
+
+/* v62 Aggregated summary cards like reference image */
+.agg-summary-card {
+    background:#ffffff;
+    border:1px solid #dbe4f0;
+    border-radius:14px;
+    padding:0 0 12px 0;
+    box-shadow:0 8px 22px rgba(15,23,42,.045);
+    margin-bottom:14px;
+}
+.agg-summary-title {
+    display:inline-block;
+    background:linear-gradient(90deg,#2333a3,#3152d9);
+    color:#ffffff;
+    padding:9px 18px;
+    border-radius:12px 12px 12px 0;
+    font-size:15px;
+    font-weight:900;
+    letter-spacing:.2px;
+    margin:0 0 8px 0;
+}
+.agg-kpi-row {
+    display:grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap:0;
+    padding:10px 16px 0 16px;
+}
+.agg-kpi {
+    display:flex;
+    align-items:center;
+    gap:14px;
+    min-height:92px;
+    padding:10px 18px;
+    border-right:1px solid #e5edf7;
+}
+.agg-kpi:last-child {
+    border-right:none;
+}
+.agg-icon {
+    width:44px;
+    height:44px;
+    border-radius:10px;
+    color:#fff;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:23px;
+    font-weight:900;
+    box-shadow:0 10px 20px rgba(15,23,42,.16);
+    flex:0 0 44px;
+}
+.agg-label {
+    font-size:13px;
+    font-weight:850;
+    color:#111827;
+    margin-bottom:8px;
+}
+.agg-value {
+    font-size:28px;
+    font-weight:900;
+    color:#111827;
+    line-height:1.0;
+    letter-spacing:-.4px;
+}
+.agg-suffix {
+    font-size:13px;
+    color:#667085;
+    font-weight:650;
+    margin-left:5px;
+}
+.agg-delta {
+    font-size:12px;
+    margin-top:10px;
+    color:#667085;
+    font-weight:650;
+}
+.agg-delta.good { color:#15803d; }
+.agg-delta.bad { color:#ef4444; }
+.agg-spark {
+    width:132px;
+    height:28px;
+    margin-top:9px;
+}
+@media(max-width:1100px){
+  .agg-kpi-row {grid-template-columns: repeat(2, 1fr);}
+  .agg-kpi:nth-child(2n){border-right:none;}
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -649,23 +737,82 @@ def top_nav() -> str:
     return tab_map[selected]
 
 
+
 def kpi_cards(df: pd.DataFrame) -> None:
     s = summarize_run(df)
     sla_fail = round(100 - s["sla_compliance"], 2) if s["transactions"] else 0
 
-    cols = st.columns(6)
-    metrics = [
-        ("Health Score", f"{s['performance_score']}/100", "Performance index"),
-        ("SLA Pass %", f"{s['sla_compliance']}%", "APIs meeting SLA"),
-        ("SLA Fail %", f"{sla_fail}%", "APIs breaching SLA"),
-        ("Total APIs", f"{s['transactions']:,}", "Compared transactions"),
-        ("Total Samples", f"{s['samples']:,}", "Executed samples"),
-        ("Total Errors", f"{s['errors']:,}", "Failed samples"),
-    ]
+    # Small static sparkline to match the executive summary visual.
+    spark = """
+    <svg class="agg-spark" viewBox="0 0 130 28" xmlns="http://www.w3.org/2000/svg">
+      <polyline points="2,20 16,19 29,20 42,17 55,18 68,11 81,16 94,18 107,9 124,14 129,8"
+        fill="none" stroke="#22a447" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    """
 
-    for col, (label, value, help_text) in zip(cols, metrics):
-        with col:
-            st.metric(label=label, value=value, help=help_text)
+    html = f"""
+<div class="agg-summary-card">
+  <div class="agg-summary-title">AGGREGATED PERFORMANCE OVERVIEW METRICS</div>
+  <div class="agg-kpi-row">
+
+    <div class="agg-kpi">
+      <div class="agg-icon" style="background:linear-gradient(135deg,#2563eb,#4f46e5);">🛡️</div>
+      <div>
+        <div class="agg-label">Health Score</div>
+        <div class="agg-value">{s['performance_score']}<span class="agg-suffix">/100</span></div>
+        {spark}
+      </div>
+    </div>
+
+    <div class="agg-kpi">
+      <div class="agg-icon" style="background:#16843a;">✓</div>
+      <div>
+        <div class="agg-label">SLA Pass %</div>
+        <div class="agg-value">{s['sla_compliance']}%</div>
+        <div class="agg-delta good">▲ APIs meeting SLA</div>
+      </div>
+    </div>
+
+    <div class="agg-kpi">
+      <div class="agg-icon" style="background:#dc2626;">×</div>
+      <div>
+        <div class="agg-label">SLA Fail %</div>
+        <div class="agg-value">{sla_fail}%</div>
+        <div class="agg-delta bad">▼ APIs breaching SLA</div>
+      </div>
+    </div>
+
+    <div class="agg-kpi">
+      <div class="agg-icon" style="background:linear-gradient(135deg,#2563eb,#3152d9);">♜</div>
+      <div>
+        <div class="agg-label">Total APIs</div>
+        <div class="agg-value">{s['transactions']:,}</div>
+        <div class="agg-delta good">▲ Compared APIs</div>
+      </div>
+    </div>
+
+    <div class="agg-kpi">
+      <div class="agg-icon" style="background:linear-gradient(135deg,#7c3aed,#a855f7);">◉</div>
+      <div>
+        <div class="agg-label">Total Samples</div>
+        <div class="agg-value">{s['samples']:,}</div>
+        <div class="agg-delta good">▲ Executed samples</div>
+      </div>
+    </div>
+
+    <div class="agg-kpi">
+      <div class="agg-icon" style="background:#dc2626;">⚠</div>
+      <div>
+        <div class="agg-label">Total Errors</div>
+        <div class="agg-value">{s['errors']:,}</div>
+        <div class="agg-delta bad">▼ Failed samples</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+"""
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def sla_donut(df: pd.DataFrame):
@@ -931,9 +1078,7 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
             st.markdown("</div>", unsafe_allow_html=True)
             return
 
-        st.markdown('<div class="overview-title-card"><div class="overview-title-pill">AGGREGATED PERFORMANCE OVERVIEW METRICS</div><div class="overview-title-sub">Across selected result files, dates and regions</div>', unsafe_allow_html=True)
         kpi_cards(df)
-        st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown('<div class="grid-3">', unsafe_allow_html=True)
         # Streamlit does not nest into raw grid well; use columns instead.
