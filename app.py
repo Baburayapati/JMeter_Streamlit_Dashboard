@@ -152,7 +152,7 @@ div[role="radiogroup"] label:has(input:checked) {
 }
 .overview-title-sub {
     color:#667085;
-    font-size:12px;
+    font-size:13px;
     padding:0 18px 12px 18px;
 }
 
@@ -187,7 +187,7 @@ div[role="radiogroup"] label:has(input:checked) {
     display:flex;
     align-items:center;
     gap:14px;
-    min-height:92px;
+    min-height:130px;
     padding:10px 18px;
     border-right:1px solid #e5edf7;
 }
@@ -236,7 +236,7 @@ div[role="radiogroup"] label:has(input:checked) {
 .agg-delta.bad { color:#ef4444; }
 .agg-spark {
     width:132px;
-    height:28px;
+    height:24px;
     margin-top:9px;
 }
 @media(max-width:1100px){
@@ -781,7 +781,7 @@ body {{
     display:flex;
     align-items:center;
     gap:14px;
-    min-height:92px;
+    min-height:130px;
     padding:10px 18px;
     border-right:1px solid #e5edf7;
 }}
@@ -821,16 +821,18 @@ body {{
     margin-left:5px;
 }}
 .agg-delta {{
-    font-size:12px;
+    font-size:13px;
     margin-top:10px;
     color:#667085;
-    font-weight:650;
+    font-weight:700;
+    line-height:1.25;
+    white-space:normal;
 }}
 .agg-delta.good {{ color:#15803d; }}
 .agg-delta.bad {{ color:#ef4444; }}
 .agg-spark {{
     width:132px;
-    height:28px;
+    height:24px;
     margin-top:9px;
 }}
 @media(max-width:1100px){{
@@ -906,7 +908,7 @@ body {{
 </body>
 </html>
 """
-    components.html(html, height=150, scrolling=False)
+    components.html(html, height=205, scrolling=False)
 
 
 def sla_donut(df: pd.DataFrame):
@@ -1142,7 +1144,7 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
         goto_tab_button('View all Insights →', 'Trends', 'view_insights_btn')
         st.markdown("</div>", unsafe_allow_html=True)
 
-        render_chatbot(selected_frames)
+        render_chatbot(selected_frames, key_suffix='tab')
 
         try:
             dashboard_url = st.secrets.get("DASHBOARD_URL", "")
@@ -1168,7 +1170,7 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
             return
         if selected_tab == "Chatbot":
             st.markdown('<div class="panel"><div class="panel-title">AI CHATBOT</div>', unsafe_allow_html=True)
-            render_chatbot(selected_frames)
+            render_chatbot(selected_frames, key_suffix='tab')
             st.markdown("</div>", unsafe_allow_html=True)
             return
 
@@ -1380,7 +1382,7 @@ def chat_answer(question: str, run_frames: List[Dict[str, pd.DataFrame]]) -> Tup
     return "I can answer only from the uploaded JMeter performance report. Try asking about SLA breaches, top slow APIs, P95/P99, errors, tracks, regions, samples, report context, or comparisons between uploaded runs.", None
 
 
-def render_chatbot(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
+def render_chatbot(run_frames: List[Dict[str, pd.DataFrame]], key_suffix: str = 'side') -> None:
     st.markdown('<div class="chat-card"><div class="chat-header">AI ASSISTANT</div>', unsafe_allow_html=True)
     st.write("Hi! I can help you analyze the performance data.")
     with st.expander("Try asking me", expanded=True):
@@ -1390,7 +1392,7 @@ def render_chatbot(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
             st.markdown(msg["content"])
             if msg.get("table") is not None:
                 st.dataframe(msg["table"], use_container_width=True, hide_index=True)
-    question = st.chat_input("Ask anything about performance...")
+    question = st.chat_input("Ask anything about performance...", key=f"chat_input_{key_suffix}")
     if question:
         st.session_state.messages.append({"role":"user","content":question,"table":None})
         answer, table = chat_answer(question, run_frames)
