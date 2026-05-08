@@ -1121,7 +1121,7 @@ def build_dashboard_track_comparison(run_frames: List[Dict[str, pd.DataFrame]]) 
                     api_df = api_df[api_df["Feature"].astype(str).isin(tracks)]
                 values = metric_bucket_summary_for_rows(api_df, metric, is_askai)
                 for name, value in zip(bucket_names + ["Max Seconds"], values):
-                    row[f"{label} | {name}"] = value
+                    row[name] = value
             rows.append(row)
 
         for track in tracks:
@@ -1132,7 +1132,7 @@ def build_dashboard_track_comparison(run_frames: List[Dict[str, pd.DataFrame]]) 
                     api_rows = frames["APIs"][frames["APIs"]["Feature"].astype(str) == str(track)]
                     values = metric_bucket_summary_for_rows(api_rows, metric, is_askai)
                     for name, value in zip(bucket_names + ["Max Seconds"], values):
-                        row[f"{label} | {name}"] = value
+                        row[name] = value
                 rows.append(row)
         return pd.DataFrame(rows)
 
@@ -1357,15 +1357,20 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
                 st.plotly_chart(fig, use_container_width=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown('<div class="panel"><div class="panel-title">TRACK COMPARISON SUMMARY <span class="tag">Same bucket logic as Excel Track_Comparison</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="panel"><div class="panel-title">TRACK COMPARISON SUMMARY <span class="tag">Total rows only</span></div>', unsafe_allow_html=True)
         askai_compare, other_compare = build_dashboard_track_comparison(selected_frames)
+
         if not askai_compare.empty:
-            st.markdown("#### AskAI Tracks")
-            st.dataframe(askai_compare, use_container_width=True, hide_index=True, height=360)
+            st.markdown("#### AskAI Tracks - Total")
+            askai_total = askai_compare.iloc[:3].copy()
+            st.dataframe(askai_total, use_container_width=True, hide_index=True, height=160)
+
         if not other_compare.empty:
-            st.markdown("#### Assets / Assessments / Home / Settings / Support Tracks")
-            st.dataframe(other_compare, use_container_width=True, hide_index=True, height=520)
-        goto_tab_button('Open Full Track Comparison →', 'Compare', 'overview_full_compare_btn')
+            st.markdown("#### Assets / Assessments / Home / Settings / Support Tracks - Total")
+            other_total = other_compare.iloc[:3].copy()
+            st.dataframe(other_total, use_container_width=True, hide_index=True, height=160)
+
+        goto_tab_button('Open Full Track Comparison →', 'Track Comparison', 'overview_full_compare_btn')
         st.markdown("</div>", unsafe_allow_html=True)
 
 
