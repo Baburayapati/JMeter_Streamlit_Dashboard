@@ -259,6 +259,45 @@ div[role="radiogroup"] label:has(input:checked) {
     font-weight:800 !important;
 }
 
+
+/* v67 real clickable dashboard anchor tabs */
+.dash-tabs {
+    display:flex;
+    justify-content:center;
+    gap:12px;
+    background:#ffffff;
+    border:1px solid #dbe4f0;
+    border-radius:14px;
+    padding:10px;
+    margin:0 0 14px 0;
+    box-shadow:0 8px 20px rgba(15,23,42,.045);
+    flex-wrap:wrap;
+}
+.dash-tab {
+    text-decoration:none !important;
+    background:#f8fbff;
+    border:1px solid #e0e7f3;
+    border-radius:12px;
+    padding:9px 14px;
+    min-width:118px;
+    text-align:center;
+    font-weight:850;
+    color:#0f2b68 !important;
+    transition:.15s ease-in-out;
+    display:inline-block;
+}
+.dash-tab:hover {
+    border-color:#2563eb;
+    box-shadow:0 8px 18px rgba(37,99,235,.12);
+    transform:translateY(-1px);
+}
+.dash-tab.active {
+    background:linear-gradient(90deg,#4f46e5,#2563eb);
+    color:#ffffff !important;
+    border-color:transparent;
+    box-shadow:0 12px 24px rgba(37,99,235,.28);
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -707,9 +746,36 @@ def combined_df(run_frames: List[Dict[str, pd.DataFrame]]) -> pd.DataFrame:
 
 
 
+
 def top_nav() -> str:
+    current_tab = params.get("tab", "") or st.session_state.get("dashboard_tab", "Overview")
+    if "nav_target" in st.session_state:
+        current_tab = st.session_state.pop("nav_target")
+
+    valid_tabs = ["Overview", "Track Comparison", "Compare", "Trends", "Drilldown", "Reports", "Chatbot"]
+    if current_tab not in valid_tabs:
+        current_tab = "Overview"
+    st.session_state["dashboard_tab"] = current_tab
+
+    current_run_id = params.get("run_id", "") or st.session_state.get("run_id", "")
+    tabs = [
+        ("Overview", "🏠 Overview"),
+        ("Track Comparison", "📊 Track Comparison"),
+        ("Compare", "🌐 Compare"),
+        ("Trends", "📈 Trends"),
+        ("Drilldown", "🔎 Drilldown"),
+        ("Reports", "📄 Reports"),
+        ("Chatbot", "💬 Chatbot"),
+    ]
+
+    links = ""
+    for tab_value, tab_label in tabs:
+        active_class = " active" if tab_value == current_tab else ""
+        href = f"?view=dashboard&run_id={current_run_id}&tab={tab_value}"
+        links += f'<a class="dash-tab{active_class}" href="{href}">{tab_label}</a>'
+
     st.markdown(
-        """
+        f"""
 <div class="top-nav">
   <div class="brand">
     <div class="brand-icon">📈</div>
@@ -720,40 +786,12 @@ def top_nav() -> str:
   </div>
   <div class="nav-time">Dashboard View<br/>Last Updated</div>
 </div>
+<div class="dash-tabs">{links}</div>
 """,
         unsafe_allow_html=True,
     )
 
-    tabs = [
-        ("Overview", "🏠 Overview"),
-        ("Compare", "📊 Compare"),
-        ("Trends", "📈 Trends"),
-        ("Drilldown", "🔎 Drilldown"),
-        ("Reports", "📄 Reports"),
-        ("Chatbot", "💬 Chatbot"),
-    ]
-
-    requested_from_url = params.get("tab", "")
-    if requested_from_url in [t[0] for t in tabs]:
-        st.session_state["dashboard_tab"] = requested_from_url
-
-    if "nav_target" in st.session_state:
-        st.session_state["dashboard_tab"] = st.session_state.pop("nav_target")
-
-    if "dashboard_tab" not in st.session_state:
-        st.session_state["dashboard_tab"] = "Overview"
-
-    st.markdown('<div class="nav-button-row">', unsafe_allow_html=True)
-    cols = st.columns(len(tabs))
-    for col, (tab_value, tab_label) in zip(cols, tabs):
-        with col:
-            button_type = "primary" if st.session_state["dashboard_tab"] == tab_value else "secondary"
-            if st.button(tab_label, key=f"top_nav_{tab_value}", use_container_width=True, type=button_type):
-                st.session_state["dashboard_tab"] = tab_value
-                st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    return st.session_state["dashboard_tab"]
+    return current_tab
 
 
 def kpi_cards(df: pd.DataFrame) -> None:
@@ -1041,6 +1079,7 @@ def metric_bucket_summary(df: pd.DataFrame, track: str, metric: str, is_askai: b
     return percentages + [round(float(values.max()), 2)]
 
 
+
 def build_dashboard_track_comparison(run_frames: List[Dict[str, pd.DataFrame]]) -> Tuple[pd.DataFrame, pd.DataFrame]:
     all_tracks = sorted(set().union(*[set(frames["APIs"]["Feature"].dropna().astype(str)) for frames in run_frames]))
     all_tracks = [t for t in all_tracks if t.lower() != "total" and "select customer" not in t.lower()]
@@ -1048,15 +1087,50 @@ def build_dashboard_track_comparison(run_frames: List[Dict[str, pd.DataFrame]]) 
     askai_tracks = [t for t in all_tracks if t.upper().startswith("ASKAI")]
     other_tracks = [t for t in all_tracks if not t.upper().startswith("ASKAI")]
 
+    def metric_bucket_summary_for_rows(rows: pd.DataFrame, metric: str, is_askai: bool) -> List[float]:
+        col_map = {
+            "Avg": "Avg ResTime in sec",
+            "Min": "Min ResTime in sec",
+            "Max": "MaxRes Time in sec",
+        }
+        col = col_map[metric]
+        bucket_names = ["0-10sec %", "10-20sec %", "20-30sec %", ">30sec %"] if is_askai else ["0-2sec %", "3-4sec %", "4-6sec %", ">6sec %"]
+        if rows.empty or col not in rows.columns:
+            return [0, 0, 0, 0, 0]
+
+        counts = dict.fromkeys(bucket_names, 0)
+        values = pd.to_numeric(rows[col], errors="coerce").fillna(0)
+        for value in values:
+            bucket = response_bucket(float(value), is_askai).replace("s %", "sec %")
+            counts[bucket] = counts.get(bucket, 0) + 1
+        total = len(values) if len(values) else 1
+        percentages = [round(counts[name] / total * 100, 2) for name in bucket_names]
+        return percentages + [round(float(values.max()), 2)]
+
     def build_section(tracks: List[str], is_askai: bool) -> pd.DataFrame:
         rows = []
-        bucket_names = ["0-10s %", "10-20s %", "20-30s %", ">30s %"] if is_askai else ["0-2s %", "3-4s %", "4-6s %", ">6s %"]
+        bucket_names = ["0-10sec %", "10-20sec %", "20-30sec %", ">30sec %"] if is_askai else ["0-2sec %", "3-4sec %", "4-6sec %", ">6sec %"]
+
+        # Total rows first, matching Excel Track_Comparison style.
+        for metric in ["Avg", "Min", "Max"]:
+            row = {"Track": "Total" if metric == "Avg" else "", "Metric": metric}
+            for frames in run_frames:
+                label = frames["Label"]
+                api_df = frames["APIs"].copy()
+                if tracks:
+                    api_df = api_df[api_df["Feature"].astype(str).isin(tracks)]
+                values = metric_bucket_summary_for_rows(api_df, metric, is_askai)
+                for name, value in zip(bucket_names + ["Max Seconds"], values):
+                    row[f"{label} | {name}"] = value
+            rows.append(row)
+
         for track in tracks:
             for metric in ["Avg", "Min", "Max"]:
                 row = {"Track": track if metric == "Avg" else "", "Metric": metric}
                 for frames in run_frames:
                     label = frames["Label"]
-                    values = metric_bucket_summary(frames["APIs"], track, metric, is_askai)
+                    api_rows = frames["APIs"][frames["APIs"]["Feature"].astype(str) == str(track)]
+                    values = metric_bucket_summary_for_rows(api_rows, metric, is_askai)
                     for name, value in zip(bucket_names + ["Max Seconds"], values):
                         row[f"{label} | {name}"] = value
                 rows.append(row)
@@ -1065,25 +1139,25 @@ def build_dashboard_track_comparison(run_frames: List[Dict[str, pd.DataFrame]]) 
     return build_section(askai_tracks, True), build_section(other_tracks, False)
 
 
+
 def render_compare_tab(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
-    st.markdown('<div class="panel"><div class="panel-title">TRACK COMPARISON DASHBOARD <span class="tag">Same logic as Excel Track_Comparison</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel"><div class="panel-title">TRACK COMPARISON <span class="tag">Same metrics as Excel Track_Comparison</span></div>', unsafe_allow_html=True)
 
-    if len(run_frames) < 2:
-        st.info("Upload two or more JSON reports to see side-by-side comparison.")
+    askai_df, other_df = build_dashboard_track_comparison(run_frames)
+
+    st.markdown("### AskAI Tracks")
+    st.caption("Buckets: 0-10sec %, 10-20sec %, 20-30sec %, >30sec %, Max Seconds")
+    if not askai_df.empty:
+        st.dataframe(askai_df, use_container_width=True, hide_index=True, height=420)
     else:
-        askai_df, other_df = build_dashboard_track_comparison(run_frames)
+        st.info("No AskAI tracks found.")
 
-        st.markdown("### AskAI Tracks — 0-10s / 10-20s / 20-30s / >30s")
-        if not askai_df.empty:
-            st.dataframe(askai_df, use_container_width=True, hide_index=True, height=360)
-        else:
-            st.info("No AskAI tracks found.")
-
-        st.markdown("### Assets / Assessments / Home / Settings / Support Tracks — 0-2s / 3-4s / 4-6s / >6s")
-        if not other_df.empty:
-            st.dataframe(other_df, use_container_width=True, hide_index=True, height=520)
-        else:
-            st.info("No non-AskAI tracks found.")
+    st.markdown("### Assets / Assessments / Home / Settings / Support Tracks")
+    st.caption("Buckets: 0-2sec %, 3-4sec %, 4-6sec %, >6sec %, Max Seconds")
+    if not other_df.empty:
+        st.dataframe(other_df, use_container_width=True, hide_index=True, height=620)
+    else:
+        st.info("No non-AskAI tracks found.")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1170,7 +1244,7 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
     with main_col:
         df = combined_df(selected_frames)
 
-        if selected_tab == "Compare":
+        if selected_tab in ["Track Comparison", "Compare"]:
             render_compare_tab(selected_frames)
             return
         if selected_tab == "Trends":
@@ -1198,12 +1272,20 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
         tracks = track_summary(df)
 
         with c1:
-            st.markdown('<div class="panel"><div class="panel-title">Response Time (P95)</div>', unsafe_allow_html=True)
+            st.markdown('<div class="panel"><div class="panel-title">Response Time</div>', unsafe_allow_html=True)
             if not tracks.empty:
-                chart_df = tracks.head(9).sort_values("P95_Sec")
-                fig = px.bar(chart_df, x="Feature", y="P95_Sec", text="P95_Sec", color_discrete_sequence=["#0b72d9"])
+                chart_df = tracks.head(8).sort_values("P95_Sec")
+                plot_df = chart_df[["Feature", "Avg_Sec", "P95_Sec", "Max_Sec"]].rename(
+                    columns={
+                        "Avg_Sec": "Avg",
+                        "P95_Sec": "95th Percentile",
+                        "Max_Sec": "Max",
+                    }
+                )
+                long_df = plot_df.melt(id_vars="Feature", var_name="Metric", value_name="Seconds")
+                fig = px.bar(long_df, x="Feature", y="Seconds", color="Metric", barmode="group", text="Seconds")
                 fig.update_traces(texttemplate="%{text:.1f}s", textposition="outside")
-                fig.update_layout(height=300, margin=dict(l=8, r=10, t=5, b=88), xaxis_title="", yaxis_title="P95 (sec)", showlegend=False)
+                fig.update_layout(height=330, margin=dict(l=8, r=10, t=5, b=95), xaxis_title="", yaxis_title="Seconds", legend_title="")
                 st.plotly_chart(fig, use_container_width=True)
             goto_tab_button('View all APIs →', 'Drilldown', 'view_all_apis_btn')
             st.markdown("</div>", unsafe_allow_html=True)
@@ -1277,15 +1359,12 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
 
         st.markdown('<div class="panel"><div class="panel-title">TRACK COMPARISON SUMMARY <span class="tag">Same bucket logic as Excel Track_Comparison</span></div>', unsafe_allow_html=True)
         askai_compare, other_compare = build_dashboard_track_comparison(selected_frames)
-        if len(selected_frames) < 2:
-            st.info("Upload two or more reports to compare tracks side by side.")
-        else:
-            if not askai_compare.empty:
-                st.markdown("#### AskAI Tracks")
-                st.dataframe(askai_compare, use_container_width=True, hide_index=True, height=360)
-            if not other_compare.empty:
-                st.markdown("#### Assets / Assessments / Home / Settings / Support Tracks")
-                st.dataframe(other_compare, use_container_width=True, hide_index=True, height=520)
+        if not askai_compare.empty:
+            st.markdown("#### AskAI Tracks")
+            st.dataframe(askai_compare, use_container_width=True, hide_index=True, height=360)
+        if not other_compare.empty:
+            st.markdown("#### Assets / Assessments / Home / Settings / Support Tracks")
+            st.dataframe(other_compare, use_container_width=True, hide_index=True, height=520)
         goto_tab_button('Open Full Track Comparison →', 'Compare', 'overview_full_compare_btn')
         st.markdown("</div>", unsafe_allow_html=True)
 
