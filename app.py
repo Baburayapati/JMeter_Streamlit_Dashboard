@@ -752,9 +752,7 @@ def top_nav() -> str:
     if "nav_target" in st.session_state:
         current_tab = st.session_state.pop("nav_target")
 
-    valid_tabs = ["Overview", "Track Comparison", "Compare", "Trends", "Drilldown", "Reports"]
-    if current_tab == "Chatbot":
-        current_tab = "Overview"
+    valid_tabs = ["Overview", "Track Comparison", "Compare", "Trends", "Drilldown", "Reports", "Chatbot"]
     if current_tab not in valid_tabs:
         current_tab = "Overview"
     st.session_state["dashboard_tab"] = current_tab
@@ -767,6 +765,7 @@ def top_nav() -> str:
         ("Trends", "📈 Trends"),
         ("Drilldown", "🔎 Drilldown"),
         ("Reports", "📄 Reports"),
+        ("Chatbot", "💬 Chatbot"),
     ]
 
     links = ""
@@ -1233,8 +1232,6 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
         goto_tab_button('View all Insights →', 'Trends', 'view_insights_btn')
         st.markdown("</div>", unsafe_allow_html=True)
 
-        render_chatbot(selected_frames, key_suffix='side')
-
         try:
             dashboard_url = st.secrets.get("DASHBOARD_URL", "")
         except Exception:
@@ -1247,6 +1244,12 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
 
         if selected_tab in ["Track Comparison", "Compare"]:
             render_compare_tab(selected_frames)
+            return
+
+        if selected_tab == "Chatbot":
+            st.markdown('<div class="panel"><div class="panel-title">AI CHATBOT</div>', unsafe_allow_html=True)
+            render_chatbot(selected_frames, key_suffix='tab')
+            st.markdown("</div>", unsafe_allow_html=True)
             return
         if selected_tab == "Trends":
             render_trends_tab(selected_frames)
@@ -1590,7 +1593,7 @@ def render_action_cards() -> None:
     has_report = bool(st.session_state.get("run_id") and st.session_state.get("excel_bytes"))
     run_id_value = st.session_state.get("run_id", "")
     dashboard_href = f"?view=dashboard&run_id={run_id_value}&tab=Overview" if has_report else "#"
-    chatbot_href = f"?view=dashboard&run_id={run_id_value}&tab=Overview" if has_report else "#"
+    chatbot_href = f"?view=dashboard&run_id={run_id_value}&tab=Chatbot" if has_report else "#"
 
     st.markdown(
         """
