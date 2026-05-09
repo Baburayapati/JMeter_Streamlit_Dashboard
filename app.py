@@ -1643,9 +1643,14 @@ def infer_saved_report_info(file_name: str) -> Dict[str, str]:
         users = user_match.group(1)
 
     devices = "N/A"
-    device_match = re.search(r"(\d+)\s*DEVICES?", upper)
+    # Supports: 100KDevices, 100K_Devices, 100000Devices, 100 Devices
+    device_match = re.search(r"(\d+\s*K?|\d+)\s*[_\-\s]*DEVICES?", upper)
     if device_match:
-        devices = device_match.group(1)
+        devices = device_match.group(1).replace(" ", "")
+        if devices.endswith("K"):
+            devices = f"{devices} Devices"
+        else:
+            devices = f"{devices} Devices"
 
     return {
         "region": region,
