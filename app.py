@@ -1597,13 +1597,14 @@ def save_uploaded_files_to_latest(uploaded_files) -> None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         saved_name = f"{timestamp}_{clean_name}"
         saved_path = SAVED_REPORTS_DIR / saved_name
-        saved_path.write_bytes(uploaded_file.getvalue())
+        file_bytes = uploaded_file.getvalue()
+        saved_path.write_bytes(file_bytes)
 
         existing.insert(0, {
             "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "file_name": clean_name,
             "saved_name": saved_name,
-            "size_kb": round(len(uploaded_file.getvalue()) / 1024, 2),
+            "size_kb": round(len(file_bytes) / 1024, 2),
         })
 
     keep = existing[:5]
@@ -1632,7 +1633,7 @@ def render_latest_uploads_panel() -> None:
 
     st.markdown(
         """
-<div class="main-page-card upload-card">
+<div class="main-page-card upload-card" style="margin-top:14px;">
   <h3 style="margin-top:0;color:#0f2b68;">Latest Team Uploads</h3>
   <p style="color:#667085;font-size:13px;margin-top:-4px;">Latest 5 uploaded JMeter JSON files are saved for team reference.</p>
 </div>
@@ -1644,20 +1645,22 @@ def render_latest_uploads_panel() -> None:
         st.info("No saved uploads yet. Upload JSON files and click Generate Results.")
         return
 
-    header = st.columns([0.6, 3.4, 2.2, 1.4])
+    header = st.columns([0.6, 3.4, 2.1, 1.2, 1.5])
     header[0].markdown("**#**")
     header[1].markdown("**File name**")
     header[2].markdown("**Uploaded at**")
-    header[3].markdown("**Action**")
+    header[3].markdown("**Size KB**")
+    header[4].markdown("**Action**")
 
     for index, item in enumerate(uploads, start=1):
         file_path = SAVED_REPORTS_DIR / item["saved_name"]
-        c1, c2, c3, c4 = st.columns([0.6, 3.4, 2.2, 1.4])
+        c1, c2, c3, c4, c5 = st.columns([0.6, 3.4, 2.1, 1.2, 1.5])
         c1.write(f"#{index}")
         c2.write(item["file_name"])
         c3.write(item["uploaded_at"])
+        c4.write(item.get("size_kb", ""))
         if file_path.exists():
-            c4.download_button(
+            c5.download_button(
                 "Download",
                 data=file_path.read_bytes(),
                 file_name=item["file_name"],
@@ -1666,7 +1669,7 @@ def render_latest_uploads_panel() -> None:
                 use_container_width=True,
             )
         else:
-            c4.warning("Missing")
+            c5.warning("Missing")
 
 
 def render_main_page() -> None:
@@ -1792,7 +1795,7 @@ if dashboard_only:
         st.warning("No dashboard data found for this tab. Please generate the report from the main page and click Open Dashboard in New Tab again.")
 else:
     render_main_page()
-    # render_action_cards shown above
+    # action cards already shown above
     render_latest_uploads_panel()
     uploaded_files = st.file_uploader("Upload JMeter statistics.json file(s)", type=["json"], accept_multiple_files=True)
     save_reports = st.checkbox(
@@ -1800,10 +1803,10 @@ else:
         value=True,
         key="save_reports_checkbox"
     )
-
     generate_clicked = st.button("Generate Results", type="primary", disabled=not uploaded_files)
     if uploaded_files and generate_clicked:
-        save_uploaded_files_to_latest(uploaded_files)
+        if st.session_state.get('save_reports_checkbox', True):
+            save_uploaded_files_to_latest(uploaded_files)
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
             json_paths: List[Path] = []
@@ -1836,4 +1839,4 @@ else:
             except Exception as exc:
                 st.error(f"Failed to generate report: {exc}")
 
-    # render_action_cards shown above
+    # action cards already shown above

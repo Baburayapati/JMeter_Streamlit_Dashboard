@@ -621,10 +621,13 @@ streamlit run app.py
 - Dashboard title corrected to CiscoIQ-SaaS-Support-Services Performance Dashboard.
 
 
-## v72 Latest 5 uploads
+## v75 Restore main UI + latest 5 uploads
 
-- Main page shows latest 5 uploaded JMeter JSON files.
-- Saved uploads are stored in `saved_reports/`.
-- Older uploads are auto-removed after the latest 5.
-- Team members can download recent JSON uploads from the main page.
-- Streamlit Cloud note: saved files may reset after app restart/redeploy unless persistent storage is added.
+- Restored main UI cards:
+  - Executive Dashboard
+  - Excel Report
+  - AI Chatbot
+- Added latest 5 team uploads section.
+- Added Save uploaded reports checkbox.
+- Latest uploads are saved under `saved_reports/`.
+- Older uploads are auto-removed after latest 5.
