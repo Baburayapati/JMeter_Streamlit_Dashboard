@@ -1795,10 +1795,15 @@ else:
     # render_action_cards shown above
     render_latest_uploads_panel()
     uploaded_files = st.file_uploader("Upload JMeter statistics.json file(s)", type=["json"], accept_multiple_files=True)
+    save_reports = st.checkbox(
+        "Save uploaded reports for team visibility",
+        value=True,
+        key="save_reports_checkbox"
+    )
+
     generate_clicked = st.button("Generate Results", type="primary", disabled=not uploaded_files)
     if uploaded_files and generate_clicked:
-        if st.session_state.get('save_reports_checkbox', True):
-            save_uploaded_files_to_latest(uploaded_files)
+        save_uploaded_files_to_latest(uploaded_files)
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
             json_paths: List[Path] = []
