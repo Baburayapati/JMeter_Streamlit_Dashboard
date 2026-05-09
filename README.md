@@ -619,3 +619,12 @@ streamlit run app.py
 - Executive Dashboard / Excel Report / AI Chatbot cards are visible by default.
 - Excel download button is inside the Excel Report card after generation.
 - Dashboard title corrected to CiscoIQ-SaaS-Support-Services Performance Dashboard.
+
+
+## v72 Latest 5 uploads
+
+- Main page shows latest 5 uploaded JMeter JSON files.
+- Saved uploads are stored in `saved_reports/`.
+- Older uploads are auto-removed after the latest 5.
+- Team members can download recent JSON uploads from the main page.
+- Streamlit Cloud note: saved files may reset after app restart/redeploy unless persistent storage is added.
