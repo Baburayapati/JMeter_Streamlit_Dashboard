@@ -647,3 +647,13 @@ Changes added only:
 - Saved reports show Date / Duration and generate tooltip info.
 - Generate Results buttons identify which saved report is used.
 - Latest Team Uploads box and main title font/height reduced.
+
+
+## v79 Saved Reports cleanup + executive UI polish
+
+- Existing duplicate saved reports are cleaned automatically.
+- New duplicate uploads are skipped using file hash and file name.
+- Added Remove option for saved reports.
+- Removed JSON download button from saved reports table.
+- Saved reports show Region, Date/Duration and Generate action.
+- Main UI background updated with a more executive visual style.

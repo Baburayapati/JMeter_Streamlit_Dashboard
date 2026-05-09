@@ -301,6 +301,26 @@ div[role="radiogroup"] label:has(input:checked) {
     box-shadow:0 12px 24px rgba(37,99,235,.28);
 }
 
+
+/* v79 Executive main background polish */
+.stApp {
+  background:
+    radial-gradient(circle at 8% 8%, rgba(37,99,235,.10), transparent 28%),
+    radial-gradient(circle at 92% 10%, rgba(124,58,237,.12), transparent 24%),
+    linear-gradient(135deg,#eef5ff 0%, #f8fbff 44%, #f2f5ff 100%) !important;
+}
+.main-page-card, .upload-card {
+  border: 1px solid rgba(37,99,235,.12) !important;
+  box-shadow: 0 14px 34px rgba(15,23,42,.08) !important;
+}
+.stFileUploader {
+  background: rgba(255,255,255,.92) !important;
+  border: 1px dashed rgba(37,99,235,.28) !important;
+  border-radius: 18px !important;
+  padding: 14px !important;
+  box-shadow: 0 10px 28px rgba(15,23,42,.06) !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -1636,9 +1656,76 @@ def infer_saved_report_info(file_name: str) -> Dict[str, str]:
     }
 
 
-def save_uploaded_files_to_latest(uploaded_files) -> None:
+
+def normalize_saved_uploads(existing: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """Remove duplicate saved reports from existing metadata and disk.
+    Duplicates are detected by file_hash first, then file_name.
+    """
+    seen_hashes = set()
+    seen_names = set()
+    cleaned = []
+    duplicates = []
+
+    for item in existing:
+        file_name = item.get("file_name", "")
+        saved_name = item.get("saved_name", "")
+        file_hash = item.get("file_hash", "")
+
+        # Backfill hash for older saved files if missing.
+        saved_path = SAVED_REPORTS_DIR / saved_name
+        if not file_hash and saved_path.exists():
+            try:
+                file_hash = hashlib.sha256(saved_path.read_bytes()).hexdigest()
+                item["file_hash"] = file_hash
+            except Exception:
+                file_hash = ""
+
+        duplicate = False
+        if file_hash and file_hash in seen_hashes:
+            duplicate = True
+        if file_name and file_name in seen_names:
+            duplicate = True
+
+        if duplicate:
+            duplicates.append(item)
+            continue
+
+        if file_hash:
+            seen_hashes.add(file_hash)
+        if file_name:
+            seen_names.add(file_name)
+        cleaned.append(item)
+
+    # Remove duplicate physical files.
+    for item in duplicates:
+        try:
+            dup_path = SAVED_REPORTS_DIR / item.get("saved_name", "")
+            if dup_path.exists():
+                dup_path.unlink()
+        except Exception:
+            pass
+
+    return cleaned
+
+
+def remove_saved_upload(saved_name: str) -> None:
     ensure_saved_reports_dir()
     existing = load_saved_uploads()
+    updated = [item for item in existing if item.get("saved_name") != saved_name]
+
+    try:
+        file_path = SAVED_REPORTS_DIR / saved_name
+        if file_path.exists():
+            file_path.unlink()
+    except Exception:
+        pass
+
+    SAVED_REPORTS_META.write_text(json.dumps(updated, indent=2), encoding="utf-8")
+
+
+def save_uploaded_files_to_latest(uploaded_files) -> None:
+    ensure_saved_reports_dir()
+    existing = normalize_saved_uploads(load_saved_uploads())
     existing_hashes = {item.get("file_hash") for item in existing if item.get("file_hash")}
     existing_names = {item.get("file_name") for item in existing if item.get("file_name")}
 
@@ -1735,25 +1822,30 @@ def generate_dashboard_from_json_paths(json_paths: List[Path], labels: List[str]
 
 
 def render_latest_uploads_panel() -> None:
-    uploads = load_saved_uploads()
+    uploads = normalize_saved_uploads(load_saved_uploads())
+    # Persist duplicate cleanup immediately so user sees clean list.
+    try:
+        SAVED_REPORTS_META.write_text(json.dumps(uploads[:5], indent=2), encoding="utf-8")
+    except Exception:
+        pass
 
     st.markdown(
         """
 <div class="main-page-card upload-card latest-team-box">
   <h3>Latest Team Uploads</h3>
-  <p>Latest 5 uploaded JMeter JSON reports are saved for team reference. Duplicates are skipped automatically.</p>
+  <p>Latest 5 uploaded JMeter JSON reports are saved for team reference. Duplicate reports are automatically skipped.</p>
 </div>
 <style>
 .latest-team-box {
     margin-top:10px !important;
-    padding:12px 16px !important;
-    max-width: 980px !important;
+    padding:10px 14px !important;
+    max-width: 960px !important;
 }
 .latest-team-box h3 {
-    margin:0 0 4px 0 !important;
+    margin:0 0 3px 0 !important;
     color:#0f2b68 !important;
-    font-size:18px !important;
-    line-height:1.2 !important;
+    font-size:17px !important;
+    line-height:1.15 !important;
 }
 .latest-team-box p {
     color:#667085 !important;
@@ -1761,11 +1853,11 @@ def render_latest_uploads_panel() -> None:
     margin:0 !important;
 }
 .hero-title-box {
-    padding:14px 22px !important;
+    padding:13px 20px !important;
 }
 .hero-title-box h1 {
-    font-size:20px !important;
-    line-height:1.15 !important;
+    font-size:19px !important;
+    line-height:1.12 !important;
 }
 .hero-subtitle {
     font-size:14px !important;
@@ -1789,8 +1881,7 @@ def render_latest_uploads_panel() -> None:
             saved_labels.append(Path(item["file_name"]).stem)
 
     if saved_paths:
-        info_text = f"Generate comparison/dashboard using latest {len(saved_paths)} saved report(s)."
-        st.caption(info_text)
+        st.caption(f"Generate comparison/dashboard using latest {len(saved_paths)} saved report(s).")
         if st.button("Generate Results From Latest Saved Uploads", key="generate_all_saved_uploads", use_container_width=True):
             try:
                 generate_dashboard_from_json_paths(saved_paths, saved_labels)
@@ -1799,26 +1890,27 @@ def render_latest_uploads_panel() -> None:
             except Exception as exc:
                 st.error(f"Failed to generate from saved uploads: {exc}")
 
-    header = st.columns([0.45, 2.6, 1.0, 1.5, 1.5, 1.4, 1.2])
+    header = st.columns([0.4, 2.8, 0.9, 1.35, 1.45, 1.35, 1.0])
     header[0].markdown("**#**")
     header[1].markdown("**File name**")
     header[2].markdown("**Region**")
     header[3].markdown("**Date / Duration**")
     header[4].markdown("**Uploaded at**")
     header[5].markdown("**Generate**")
-    header[6].markdown("**JSON**")
+    header[6].markdown("**Remove**")
 
     for index, item in enumerate(uploads, start=1):
         file_path = SAVED_REPORTS_DIR / item["saved_name"]
-        region = item.get("region") or infer_saved_report_info(item.get("file_name", "")).get("region", "Unknown")
-        date = item.get("date") or infer_saved_report_info(item.get("file_name", "")).get("date", "N/A")
-        duration = item.get("duration") or infer_saved_report_info(item.get("file_name", "")).get("duration", "N/A")
-        users = item.get("users") or infer_saved_report_info(item.get("file_name", "")).get("users", "N/A")
-        devices = item.get("devices") or infer_saved_report_info(item.get("file_name", "")).get("devices", "N/A")
+        inferred = infer_saved_report_info(item.get("file_name", ""))
+        region = item.get("region") or inferred.get("region", "Unknown")
+        date = item.get("date") or inferred.get("date", "N/A")
+        duration = item.get("duration") or inferred.get("duration", "N/A")
+        users = item.get("users") or inferred.get("users", "N/A")
+        devices = item.get("devices") or inferred.get("devices", "N/A")
         report_info = f"{date} / {duration}"
-        tooltip = f"Report: {region}, {date}, {duration}, Users: {users}, Devices: {devices}"
+        tooltip = f"Generate dashboard for: Region={region}, Date={date}, Duration={duration}, Users={users}, Devices={devices}"
 
-        c1, c2, c3, c4, c5, c6, c7 = st.columns([0.45, 2.6, 1.0, 1.5, 1.5, 1.4, 1.2])
+        c1, c2, c3, c4, c5, c6, c7 = st.columns([0.4, 2.8, 0.9, 1.35, 1.45, 1.35, 1.0])
         c1.write(f"#{index}")
         c2.write(item["file_name"])
         c3.write(region)
@@ -1833,18 +1925,13 @@ def render_latest_uploads_panel() -> None:
                     st.rerun()
                 except Exception as exc:
                     st.error(f"Failed to generate saved report: {exc}")
-
-            c7.download_button(
-                "Download",
-                data=file_path.read_bytes(),
-                file_name=item["file_name"],
-                mime="application/json",
-                key=f"download_saved_upload_{index}_{item['saved_name']}",
-                use_container_width=True,
-            )
         else:
             c6.warning("Missing")
-            c7.write("-")
+
+        if c7.button("Remove", key=f"remove_saved_upload_{index}_{item['saved_name']}", use_container_width=True):
+            remove_saved_upload(item["saved_name"])
+            st.success(f"Removed saved report: {item['file_name']}")
+            st.rerun()
 
 
 
