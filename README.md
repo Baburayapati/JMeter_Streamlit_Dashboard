@@ -619,3 +619,14 @@ streamlit run app.py
 - Executive Dashboard / Excel Report / AI Chatbot cards are visible by default.
 - Excel download button is inside the Excel Report card after generation.
 - Dashboard title corrected to CiscoIQ-SaaS-Support-Services Performance Dashboard.
+
+
+## v76 - v71 UI + Save Reports only
+
+Base: v71_chatbot_top_tab_restore
+
+Changes added only:
+- Latest Team Uploads panel.
+- Save uploaded reports checkbox.
+- Saves latest 5 uploaded JSON files under `saved_reports/`.
+- Allows team members to download latest saved uploads.

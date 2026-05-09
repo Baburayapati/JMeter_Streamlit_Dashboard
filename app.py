@@ -3,9 +3,11 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+import json
 import tempfile
 import uuid
 from typing import Dict, List, Tuple
+from datetime import datetime
 
 import pandas as pd
 import plotly.express as px
@@ -1566,6 +1568,110 @@ def render_chatbot(run_frames: List[Dict[str, pd.DataFrame]], key_suffix: str = 
 
 
 
+
+SAVED_REPORTS_DIR = Path("saved_reports")
+SAVED_REPORTS_META = SAVED_REPORTS_DIR / "latest_uploads.json"
+
+
+def ensure_saved_reports_dir() -> None:
+    SAVED_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    if not SAVED_REPORTS_META.exists():
+        SAVED_REPORTS_META.write_text("[]", encoding="utf-8")
+
+
+def load_saved_uploads() -> List[Dict[str, str]]:
+    ensure_saved_reports_dir()
+    try:
+        data = json.loads(SAVED_REPORTS_META.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def save_uploaded_files_to_latest(uploaded_files) -> None:
+    ensure_saved_reports_dir()
+    existing = load_saved_uploads()
+
+    for uploaded_file in uploaded_files:
+        clean_name = Path(uploaded_file.name).name.replace(" ", "_")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        saved_name = f"{timestamp}_{clean_name}"
+        saved_path = SAVED_REPORTS_DIR / saved_name
+        file_bytes = uploaded_file.getvalue()
+        saved_path.write_bytes(file_bytes)
+
+        existing.insert(0, {
+            "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "file_name": clean_name,
+            "saved_name": saved_name,
+            "size_kb": round(len(file_bytes) / 1024, 2),
+        })
+
+    keep = existing[:5]
+    keep_names = {item["saved_name"] for item in keep}
+
+    for old in existing[5:]:
+        try:
+            old_path = SAVED_REPORTS_DIR / old.get("saved_name", "")
+            if old_path.exists():
+                old_path.unlink()
+        except Exception:
+            pass
+
+    for file_path in SAVED_REPORTS_DIR.glob("*.json"):
+        if file_path.name not in keep_names:
+            try:
+                file_path.unlink()
+            except Exception:
+                pass
+
+    SAVED_REPORTS_META.write_text(json.dumps(keep, indent=2), encoding="utf-8")
+
+
+def render_latest_uploads_panel() -> None:
+    uploads = load_saved_uploads()
+
+    st.markdown(
+        """
+<div class="main-page-card upload-card" style="margin-top:14px;">
+  <h3 style="margin-top:0;color:#0f2b68;">Latest Team Uploads</h3>
+  <p style="color:#667085;font-size:13px;margin-top:-4px;">Latest 5 uploaded JMeter JSON files are saved for team reference.</p>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    if not uploads:
+        st.info("No saved uploads yet. Upload JSON files and click Generate Report.")
+        return
+
+    header = st.columns([0.6, 3.4, 2.2, 1.2, 1.5])
+    header[0].markdown("**#**")
+    header[1].markdown("**File name**")
+    header[2].markdown("**Uploaded at**")
+    header[3].markdown("**Size KB**")
+    header[4].markdown("**Action**")
+
+    for index, item in enumerate(uploads, start=1):
+        file_path = SAVED_REPORTS_DIR / item["saved_name"]
+        c1, c2, c3, c4, c5 = st.columns([0.6, 3.4, 2.2, 1.2, 1.5])
+        c1.write(f"#{index}")
+        c2.write(item["file_name"])
+        c3.write(item["uploaded_at"])
+        c4.write(item.get("size_kb", ""))
+        if file_path.exists():
+            c5.download_button(
+                "Download",
+                data=file_path.read_bytes(),
+                file_name=item["file_name"],
+                mime="application/json",
+                key=f"download_saved_upload_{index}_{item['saved_name']}",
+                use_container_width=True,
+            )
+        else:
+            c5.warning("Missing")
+
+
 def render_main_page() -> None:
     st.markdown(
         f"""
@@ -1689,9 +1795,17 @@ if dashboard_only:
         st.warning("No dashboard data found for this tab. Please generate the report from the main page and click Open Dashboard in New Tab again.")
 else:
     render_main_page()
+    render_latest_uploads_panel()
     uploaded_files = st.file_uploader("Upload JMeter statistics.json file(s)", type=["json"], accept_multiple_files=True)
+    save_reports = st.checkbox(
+        "Save uploaded reports for team visibility",
+        value=True,
+        key="save_reports_checkbox"
+    )
     generate_clicked = st.button("Generate Results", type="primary", disabled=not uploaded_files)
     if uploaded_files and generate_clicked:
+        if st.session_state.get('save_reports_checkbox', True):
+            save_uploaded_files_to_latest(uploaded_files)
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
             json_paths: List[Path] = []
