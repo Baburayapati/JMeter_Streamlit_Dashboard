@@ -638,3 +638,12 @@ Changes added only:
 - Each saved upload has `Generate Results`.
 - Latest saved uploads group has `Generate Results From Latest Saved Uploads`.
 - After generation, the normal Executive Dashboard / Excel Report / AI Chatbot options become available.
+
+
+## v78 Saved Upload Enhancements
+
+- Duplicate JSON reports are skipped automatically.
+- Latest Team Uploads now shows Region instead of Size.
+- Saved reports show Date / Duration and generate tooltip info.
+- Generate Results buttons identify which saved report is used.
+- Latest Team Uploads box and main title font/height reduced.

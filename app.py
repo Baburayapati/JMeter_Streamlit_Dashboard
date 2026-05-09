@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 import json
+import hashlib
 import tempfile
 import uuid
 from typing import Dict, List, Tuple
@@ -1588,24 +1589,92 @@ def load_saved_uploads() -> List[Dict[str, str]]:
         return []
 
 
+
+def infer_saved_report_info(file_name: str) -> Dict[str, str]:
+    stem = Path(file_name).stem
+    upper = stem.upper()
+
+    region = "Unknown"
+    for item in ["APJC", "EMEA", "US", "AMER", "EU", "LATAM", "INDIA"]:
+        if re.search(rf"(?:^|[_\-\s]){item}(?:$|[_\-\s])", upper):
+            region = item
+            break
+
+    duration = "N/A"
+    duration_match = re.search(r"(\d+)\s*[_\-]?\s*(HOUR|HOURS|HR|HRS)", upper)
+    if duration_match:
+        duration = f"{duration_match.group(1)} Hour"
+
+    date = "N/A"
+    # Supports April-19-2026, April19-2026, Apr-19-2026, Apr19-2026
+    date_match = re.search(
+        r"(JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER|JAN|FEB|MAR|APR|JUN|JUL|AUG|SEP|SEPT|OCT|NOV|DEC)[_\- ]?(\d{1,2})[_\-, ]+(\d{4})",
+        upper,
+    )
+    if date_match:
+        month = date_match.group(1).title()
+        day = date_match.group(2)
+        year = date_match.group(3)
+        date = f"{month}-{day}-{year}"
+
+    users = "N/A"
+    user_match = re.search(r"(\d+)\s*USERS?", upper)
+    if user_match:
+        users = user_match.group(1)
+
+    devices = "N/A"
+    device_match = re.search(r"(\d+)\s*DEVICES?", upper)
+    if device_match:
+        devices = device_match.group(1)
+
+    return {
+        "region": region,
+        "duration": duration,
+        "date": date,
+        "users": users,
+        "devices": devices,
+    }
+
+
 def save_uploaded_files_to_latest(uploaded_files) -> None:
     ensure_saved_reports_dir()
     existing = load_saved_uploads()
+    existing_hashes = {item.get("file_hash") for item in existing if item.get("file_hash")}
+    existing_names = {item.get("file_name") for item in existing if item.get("file_name")}
+
+    skipped_duplicates = []
 
     for uploaded_file in uploaded_files:
         clean_name = Path(uploaded_file.name).name.replace(" ", "_")
+        file_bytes = uploaded_file.getvalue()
+        file_hash = hashlib.sha256(file_bytes).hexdigest()
+
+        # Do not save duplicate reports. Hash match catches same content; file name catches same report uploaded again.
+        if file_hash in existing_hashes or clean_name in existing_names:
+            skipped_duplicates.append(clean_name)
+            continue
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         saved_name = f"{timestamp}_{clean_name}"
         saved_path = SAVED_REPORTS_DIR / saved_name
-        file_bytes = uploaded_file.getvalue()
         saved_path.write_bytes(file_bytes)
+
+        info = infer_saved_report_info(clean_name)
 
         existing.insert(0, {
             "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "file_name": clean_name,
             "saved_name": saved_name,
-            "size_kb": round(len(file_bytes) / 1024, 2),
+            "file_hash": file_hash,
+            "region": info["region"],
+            "date": info["date"],
+            "duration": info["duration"],
+            "users": info["users"],
+            "devices": info["devices"],
         })
+
+        existing_hashes.add(file_hash)
+        existing_names.add(clean_name)
 
     keep = existing[:5]
     keep_names = {item["saved_name"] for item in keep}
@@ -1626,6 +1695,10 @@ def save_uploaded_files_to_latest(uploaded_files) -> None:
                 pass
 
     SAVED_REPORTS_META.write_text(json.dumps(keep, indent=2), encoding="utf-8")
+
+    if skipped_duplicates:
+        st.info("Duplicate upload skipped: " + ", ".join(skipped_duplicates[:3]) + (" ..." if len(skipped_duplicates) > 3 else ""))
+
 
 
 
@@ -1666,10 +1739,39 @@ def render_latest_uploads_panel() -> None:
 
     st.markdown(
         """
-<div class="main-page-card upload-card" style="margin-top:14px;">
-  <h3 style="margin-top:0;color:#0f2b68;">Latest Team Uploads</h3>
-  <p style="color:#667085;font-size:13px;margin-top:-4px;">Latest 5 uploaded JMeter JSON files are saved for team reference. You can generate the same dashboard, Excel report and chatbot from saved files.</p>
+<div class="main-page-card upload-card latest-team-box">
+  <h3>Latest Team Uploads</h3>
+  <p>Latest 5 uploaded JMeter JSON reports are saved for team reference. Duplicates are skipped automatically.</p>
 </div>
+<style>
+.latest-team-box {
+    margin-top:10px !important;
+    padding:12px 16px !important;
+    max-width: 980px !important;
+}
+.latest-team-box h3 {
+    margin:0 0 4px 0 !important;
+    color:#0f2b68 !important;
+    font-size:18px !important;
+    line-height:1.2 !important;
+}
+.latest-team-box p {
+    color:#667085 !important;
+    font-size:12px !important;
+    margin:0 !important;
+}
+.hero-title-box {
+    padding:14px 22px !important;
+}
+.hero-title-box h1 {
+    font-size:20px !important;
+    line-height:1.15 !important;
+}
+.hero-subtitle {
+    font-size:14px !important;
+    margin-bottom:14px !important;
+}
+</style>
 """,
         unsafe_allow_html=True,
     )
@@ -1687,41 +1789,53 @@ def render_latest_uploads_panel() -> None:
             saved_labels.append(Path(item["file_name"]).stem)
 
     if saved_paths:
+        info_text = f"Generate comparison/dashboard using latest {len(saved_paths)} saved report(s)."
+        st.caption(info_text)
         if st.button("Generate Results From Latest Saved Uploads", key="generate_all_saved_uploads", use_container_width=True):
             try:
                 generate_dashboard_from_json_paths(saved_paths, saved_labels)
-                st.success("Generated dashboard, Excel report and chatbot from latest saved uploads.")
+                st.success(f"Generated dashboard, Excel report and chatbot from latest {len(saved_paths)} saved report(s).")
                 st.rerun()
             except Exception as exc:
                 st.error(f"Failed to generate from saved uploads: {exc}")
 
-    header = st.columns([0.5, 3.0, 1.8, 1.0, 1.6, 1.4])
+    header = st.columns([0.45, 2.6, 1.0, 1.5, 1.5, 1.4, 1.2])
     header[0].markdown("**#**")
     header[1].markdown("**File name**")
-    header[2].markdown("**Uploaded at**")
-    header[3].markdown("**Size KB**")
-    header[4].markdown("**Generate**")
-    header[5].markdown("**JSON**")
+    header[2].markdown("**Region**")
+    header[3].markdown("**Date / Duration**")
+    header[4].markdown("**Uploaded at**")
+    header[5].markdown("**Generate**")
+    header[6].markdown("**JSON**")
 
     for index, item in enumerate(uploads, start=1):
         file_path = SAVED_REPORTS_DIR / item["saved_name"]
-        c1, c2, c3, c4, c5, c6 = st.columns([0.5, 3.0, 1.8, 1.0, 1.6, 1.4])
+        region = item.get("region") or infer_saved_report_info(item.get("file_name", "")).get("region", "Unknown")
+        date = item.get("date") or infer_saved_report_info(item.get("file_name", "")).get("date", "N/A")
+        duration = item.get("duration") or infer_saved_report_info(item.get("file_name", "")).get("duration", "N/A")
+        users = item.get("users") or infer_saved_report_info(item.get("file_name", "")).get("users", "N/A")
+        devices = item.get("devices") or infer_saved_report_info(item.get("file_name", "")).get("devices", "N/A")
+        report_info = f"{date} / {duration}"
+        tooltip = f"Report: {region}, {date}, {duration}, Users: {users}, Devices: {devices}"
+
+        c1, c2, c3, c4, c5, c6, c7 = st.columns([0.45, 2.6, 1.0, 1.5, 1.5, 1.4, 1.2])
         c1.write(f"#{index}")
         c2.write(item["file_name"])
-        c3.write(item["uploaded_at"])
-        c4.write(item.get("size_kb", ""))
+        c3.write(region)
+        c4.write(report_info)
+        c5.write(item["uploaded_at"])
 
         if file_path.exists():
-            if c5.button("Generate Results", key=f"generate_saved_upload_{index}_{item['saved_name']}", use_container_width=True):
+            if c6.button("Generate Results", help=tooltip, key=f"generate_saved_upload_{index}_{item['saved_name']}", use_container_width=True):
                 try:
                     generate_dashboard_from_json_paths([file_path], [Path(item["file_name"]).stem])
-                    st.success("Generated dashboard, Excel report and chatbot from saved upload.")
+                    st.success(f"Generated dashboard, Excel report and chatbot for: {item['file_name']} ({region}, {date}, {duration}).")
                     st.rerun()
                 except Exception as exc:
                     st.error(f"Failed to generate saved report: {exc}")
 
-            c6.download_button(
-                "Download JSON",
+            c7.download_button(
+                "Download",
                 data=file_path.read_bytes(),
                 file_name=item["file_name"],
                 mime="application/json",
@@ -1729,8 +1843,9 @@ def render_latest_uploads_panel() -> None:
                 use_container_width=True,
             )
         else:
-            c5.warning("Missing")
-            c6.write("-")
+            c6.warning("Missing")
+            c7.write("-")
+
 
 
 
