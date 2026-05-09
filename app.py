@@ -752,7 +752,9 @@ def top_nav() -> str:
     if "nav_target" in st.session_state:
         current_tab = st.session_state.pop("nav_target")
 
-    valid_tabs = ["Overview", "Track Comparison", "Compare", "Trends", "Drilldown", "Reports", "Chatbot"]
+    valid_tabs = ["Overview", "Track Comparison", "Compare", "Trends", "Drilldown", "Reports"]
+    if current_tab == "Chatbot":
+        current_tab = "Overview"
     if current_tab not in valid_tabs:
         current_tab = "Overview"
     st.session_state["dashboard_tab"] = current_tab
@@ -765,7 +767,6 @@ def top_nav() -> str:
         ("Trends", "📈 Trends"),
         ("Drilldown", "🔎 Drilldown"),
         ("Reports", "📄 Reports"),
-        ("Chatbot", "💬 Chatbot"),
     ]
 
     links = ""
@@ -1256,12 +1257,6 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
         if selected_tab == "Reports":
             render_reports_tab()
             return
-        if selected_tab == "Chatbot":
-            st.markdown('<div class="panel"><div class="panel-title">AI CHATBOT</div>', unsafe_allow_html=True)
-            render_chatbot(selected_frames, key_suffix='tab')
-            st.markdown("</div>", unsafe_allow_html=True)
-            return
-
         kpi_cards(df)
 
         st.markdown('<div class="grid-3">', unsafe_allow_html=True)
@@ -1410,59 +1405,148 @@ def match_rows(df: pd.DataFrame, question: str) -> pd.DataFrame:
     return df[mask].copy()
 
 
+
 def chat_answer(question: str, run_frames: List[Dict[str, pd.DataFrame]]) -> Tuple[str, pd.DataFrame | None]:
     q = question.lower().strip()
-    if not run_frames: return "Upload and generate a dashboard first.", None
+    if not run_frames:
+        return "Hi! Upload and generate a dashboard first, then I can answer questions about SLA, slow APIs, errors, regions, tracks, and comparisons.", None
+
     df = combined_df(run_frames)
     label = "selected report(s)"
     n = extract_top_n(q)
     mcol = metric_col(q)
+
+    s = summarize_run(df)
+    run_count = len(run_frames)
+    regions = sorted(set([frames.get("Region", region_from_frames(frames)) for frames in run_frames]))
+    region_text = ", ".join([r for r in regions if r and r != "Unknown"]) or "selected region(s)"
+
+    # Friendly small talk.
+    greetings = {"hi", "hello", "hey", "hii", "hai", "good morning", "good afternoon", "good evening"}
+    farewells = {"bye", "goodbye", "see you", "thanks bye", "thank you bye"}
+    thanks = {"thanks", "thank you", "thx", "super", "good", "great", "awesome"}
+
+    if q in greetings or any(q.startswith(g + " ") for g in greetings):
+        return (
+            f"Hi! I’m ready to help with this JMeter report. "
+            f"Current summary: **{s['transactions']:,} APIs**, **{s['samples']:,} samples**, "
+            f"**{s['sla_compliance']}% SLA pass**, **{s['error_rate']}% error rate**, "
+            f"and regions/runs: **{region_text}**. Ask me about slow APIs, SLA breaches, errors, tracks, or comparison.",
+            None,
+        )
+
+    if q in farewells or any(w in q for w in ["bye", "goodbye", "see you"]):
+        return (
+            "Bye! Quick reminder before you go: the dashboard has SLA status, slow APIs, error APIs, region comparison, and Track Comparison. "
+            "Come back anytime and ask me about any API, track, region, or SLA breach.",
+            None,
+        )
+
+    if q in thanks or any(w in q for w in ["thank", "thanks", "awesome", "great job"]):
+        return (
+            "You’re welcome! I can still help with report questions like: top slow APIs, SLA breaches, worst tracks, top errors, P95/P99, sample count, or region comparison.",
+            None,
+        )
+
+    if any(w in q for w in ["help", "what can you do", "examples", "sample questions", "how to ask"]):
+        return (
+            "You can ask me things like:\n\n"
+            "- What is the overall SLA summary?\n"
+            "- Which APIs breached SLA?\n"
+            "- Show top 10 slow APIs by P95 or P99.\n"
+            "- Which tracks are worst?\n"
+            "- Show top error APIs.\n"
+            "- Compare APJC vs EMEA vs US.\n"
+            "- What is the report date, duration, users and devices?\n"
+            "- Search for an API, endpoint, scenario, or track name.",
+            None,
+        )
+
     if any(w in q for w in ["context","date","duration","region","users","devices","concurrent"]):
         rows = []
         for f in run_frames:
             info = f.get("Run_Info")
             if info is not None and not info.empty:
-                row = info.iloc[0].to_dict(); row["Run"] = f["Label"]; row["Region"] = f.get("Region", region_from_frames(f)); rows.append(row)
+                row = info.iloc[0].to_dict()
+                row["Run"] = f["Label"]
+                row["Region"] = f.get("Region", region_from_frames(f))
+                rows.append(row)
         if rows:
             context = pd.DataFrame(rows)
-            return "Report context extracted from uploaded filename(s).", context[safe_cols(context, ["Run","Region","Concurrent Users","Devices Count","Date","Duration"])]
-        return "Report context was not available.", None
+            return "Here is the report context I found from the uploaded run/file details.", context[safe_cols(context, ["Run","Region","Concurrent Users","Devices Count","Date","Duration"])]
+        return "Report context was not available in the uploaded file names or parsed metadata.", None
+
     if any(w in q for w in ["health","summary","overall","status","executive","overview"]):
-        s = summarize_run(df)
-        return f"Overall for **{label}**: Performance Score **{s['performance_score']}**, SLA Compliance **{s['sla_compliance']}%**, Success Rate **{s['success_rate']}%**, Error Rate **{s['error_rate']}%**, Avg Response **{s['avg_sec']} sec**, P95 **{s['p95_sec']} sec**, Errors **{s['errors']}**, Samples **{s['samples']}**.", None
+        return (
+            f"Overall for **{label}**: Health Score **{s['performance_score']}/100**, "
+            f"SLA Compliance **{s['sla_compliance']}%**, Success Rate **{s['success_rate']}%**, "
+            f"Error Rate **{s['error_rate']}%**, Avg Response **{s['avg_sec']} sec**, "
+            f"P95 **{s['p95_sec']} sec**, Total APIs **{s['transactions']:,}**, "
+            f"Samples **{s['samples']:,}**, Errors **{s['errors']:,}**.",
+            None,
+        )
+
+    if any(w in q for w in ["compare", "comparison", "regression", "improve", "degrade", "apjc", "emea", "us"]):
+        rows = []
+        for frames in run_frames:
+            row = summarize_run(frames["APIs"])
+            row["Run"] = frames["Label"]
+            row["Region"] = frames.get("Region", region_from_frames(frames))
+            rows.append(row)
+        comp = pd.DataFrame(rows)
+        if not comp.empty:
+            cols = ["Region", "Run", "avg_sec", "p95_sec", "max_sec", "success_rate", "error_rate", "sla_compliance", "performance_score", "errors", "samples"]
+            return "Here is the comparison across uploaded runs/regions.", comp[safe_cols(comp, cols)].sort_values(["Region", "Run"])
+        return "I could not find multiple run/region data to compare.", None
+
     if any(w in q for w in ["sla","breach","breached","violate","violation","pass","failed","fail"]):
         fail = df[df["SLA Status"] == "FAIL"].sort_values("SLA Breach Sec", ascending=False)
         if "pass" in q and "fail" not in q and "breach" not in q:
             ok = df[df["SLA Status"] == "PASS"].copy()
-            return "APIs passing SLA.", ok[standard_api_cols(ok)].head(n)
-        if fail.empty: return "No SLA breaches found.", None
-        return f"Top {min(n,len(fail))} SLA breaches.", fail[standard_api_cols(fail)].head(n)
+            return f"APIs passing SLA: **{len(ok):,}** out of **{len(df):,}** APIs.", ok[standard_api_cols(ok)].head(n)
+        if fail.empty:
+            return "Good news: I don’t see any SLA breaches in the selected report data.", None
+        return f"Top {min(n,len(fail))} SLA breaches. SLA is based on AskAI <10 sec and other APIs <2 sec.", fail[standard_api_cols(fail)].head(n)
+
     if any(w in q for w in ["error","errors","failure","failures","errorpct"]):
         err = df[pd.to_numeric(df.get("errorCount",0), errors="coerce").fillna(0)>0].copy()
-        if err.empty: return "No API errors found.", None
+        if err.empty:
+            return "No API errors found in the selected report data.", None
         sort_col = "errorPct" if "percent" in q or "pct" in q else "errorCount"
-        return f"Top {min(n,len(err))} error APIs sorted by {sort_col}.", err.sort_values(sort_col, ascending=False)[standard_api_cols(err)].head(n)
+        return f"Top {min(n,len(err))} error APIs sorted by **{sort_col}**.", err.sort_values(sort_col, ascending=False)[standard_api_cols(err)].head(n)
+
     if any(w in q for w in ["track","tracks","feature","features"]):
         ts = track_summary(df)
-        return "Worst tracks by P95, Avg Sec, and Errors.", ts.head(n)
+        if ts.empty:
+            return "No track/feature data found in the selected report.", None
+        return "Worst tracks by P95, Avg Sec, Max Sec, Errors, and SLA Fail %.", ts.head(n)
+
     if any(w in q for w in ["sample","samples","count","volume","load"]):
         sample_df = df.sort_values("sampleCount", ascending=False)
         return f"Top {min(n,len(sample_df))} APIs by sample count.", sample_df[standard_api_cols(sample_df)].head(n)
+
     if any(w in q for w in ["p90","p95","p99","percentile","90","95","99","slow","latency","response","time","avg","maximum","minimum","max","min"]):
-        if mcol not in df.columns: return f"{mcol} is not available.", None
+        if mcol not in df.columns:
+            return f"{mcol} is not available in this report.", None
         top = df.sort_values(mcol, ascending=False)
         return f"Top {min(n,len(top))} APIs based on **{mcol}**.", top[standard_api_cols(top)].head(n)
+
     matched = match_rows(df, question)
     if not matched.empty:
-        return f"I found {len(matched)} matching rows.", matched.sort_values(["SLA Breach Sec","Avg ResTime in sec","errorCount"], ascending=False)[standard_api_cols(matched)].head(n)
-    return "I can answer only from the uploaded JMeter performance report. Try asking about SLA breaches, top slow APIs, P95/P99, errors, tracks, regions, samples, report context, or comparisons between uploaded runs.", None
+        return f"I found {len(matched)} matching report rows for your search.", matched.sort_values(["SLA Breach Sec","Avg ResTime in sec","errorCount"], ascending=False)[standard_api_cols(matched)].head(n)
+
+    return (
+        "I can answer normal greetings and report-related questions. For this dashboard, please ask about SLA, slow APIs, P95/P99, errors, tracks, regions, samples, report context, or comparisons. "
+        "For unrelated topics, I’ll keep the answer focused on this uploaded performance report.",
+        None,
+    )
 
 
 def render_chatbot(run_frames: List[Dict[str, pd.DataFrame]], key_suffix: str = 'side') -> None:
     st.markdown('<div class="chat-card"><div class="chat-header">AI ASSISTANT</div>', unsafe_allow_html=True)
-    st.write("Hi! I can help you analyze the performance data.")
+    st.write("Hi! I can chat normally and answer questions from this uploaded performance report.")
     with st.expander("Try asking me", expanded=True):
-        st.write("- Top slow APIs in APJC\n- Why SLA failed?\n- Compare error rate by region\n- Worst performing tracks\n- What changed between runs?\n- Which APIs have highest P99?\n- Show AskAI SLA breaches\n- Which track has most errors?\n- Show highest sample count APIs\n- What is report date and duration?")
+        st.write("- Hi / Bye\n- Give overall summary\n- Top slow APIs by P95 or P99\n- Which APIs breached SLA?\n- Top error APIs\n- Compare APJC, EMEA and US\n- Worst tracks\n- What is report date and duration?")
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
@@ -1506,7 +1590,7 @@ def render_action_cards() -> None:
     has_report = bool(st.session_state.get("run_id") and st.session_state.get("excel_bytes"))
     run_id_value = st.session_state.get("run_id", "")
     dashboard_href = f"?view=dashboard&run_id={run_id_value}&tab=Overview" if has_report else "#"
-    chatbot_href = f"?view=dashboard&run_id={run_id_value}&tab=Chatbot" if has_report else "#"
+    chatbot_href = f"?view=dashboard&run_id={run_id_value}&tab=Overview" if has_report else "#"
 
     st.markdown(
         """
