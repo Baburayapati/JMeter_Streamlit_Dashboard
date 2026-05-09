@@ -1628,6 +1628,39 @@ def save_uploaded_files_to_latest(uploaded_files) -> None:
     SAVED_REPORTS_META.write_text(json.dumps(keep, indent=2), encoding="utf-8")
 
 
+
+def generate_dashboard_from_json_paths(json_paths: List[Path], labels: List[str]) -> None:
+    """Generate the same Excel/Dashboard/Chatbot state from saved JSON files."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        output_path = tmpdir_path / "JMeter_Report.xlsx"
+
+        run_frames: List[Dict[str, pd.DataFrame]] = []
+        for path, label in zip(json_paths, labels):
+            run_frames.append(process_uploaded_file(path, label))
+
+        if len(json_paths) == 1:
+            build_report(json_paths[0], output_path)
+        else:
+            build_comparison_report(json_paths, labels, output_path)
+
+        run_frames = add_region_to_frames(run_frames)
+        excel_bytes = output_path.read_bytes()
+        new_run_id = uuid.uuid4().hex
+
+        dashboard_store[new_run_id] = {
+            "run_frames": run_frames,
+            "excel_bytes": excel_bytes,
+            "report_file_name": "JMeter_Report.xlsx",
+        }
+        st.session_state.excel_bytes = excel_bytes
+        st.session_state.run_frames = run_frames
+        st.session_state.report_file_name = "JMeter_Report.xlsx"
+        st.session_state.messages = []
+        st.session_state.run_id = new_run_id
+
+
+
 def render_latest_uploads_panel() -> None:
     uploads = load_saved_uploads()
 
@@ -1635,33 +1668,60 @@ def render_latest_uploads_panel() -> None:
         """
 <div class="main-page-card upload-card" style="margin-top:14px;">
   <h3 style="margin-top:0;color:#0f2b68;">Latest Team Uploads</h3>
-  <p style="color:#667085;font-size:13px;margin-top:-4px;">Latest 5 uploaded JMeter JSON files are saved for team reference.</p>
+  <p style="color:#667085;font-size:13px;margin-top:-4px;">Latest 5 uploaded JMeter JSON files are saved for team reference. You can generate the same dashboard, Excel report and chatbot from saved files.</p>
 </div>
 """,
         unsafe_allow_html=True,
     )
 
     if not uploads:
-        st.info("No saved uploads yet. Upload JSON files and click Generate Report.")
+        st.info("No saved uploads yet. Upload JSON files and click Generate Results.")
         return
 
-    header = st.columns([0.6, 3.4, 2.2, 1.2, 1.5])
+    saved_paths = []
+    saved_labels = []
+    for item in uploads:
+        file_path = SAVED_REPORTS_DIR / item["saved_name"]
+        if file_path.exists():
+            saved_paths.append(file_path)
+            saved_labels.append(Path(item["file_name"]).stem)
+
+    if saved_paths:
+        if st.button("Generate Results From Latest Saved Uploads", key="generate_all_saved_uploads", use_container_width=True):
+            try:
+                generate_dashboard_from_json_paths(saved_paths, saved_labels)
+                st.success("Generated dashboard, Excel report and chatbot from latest saved uploads.")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Failed to generate from saved uploads: {exc}")
+
+    header = st.columns([0.5, 3.0, 1.8, 1.0, 1.6, 1.4])
     header[0].markdown("**#**")
     header[1].markdown("**File name**")
     header[2].markdown("**Uploaded at**")
     header[3].markdown("**Size KB**")
-    header[4].markdown("**Action**")
+    header[4].markdown("**Generate**")
+    header[5].markdown("**JSON**")
 
     for index, item in enumerate(uploads, start=1):
         file_path = SAVED_REPORTS_DIR / item["saved_name"]
-        c1, c2, c3, c4, c5 = st.columns([0.6, 3.4, 2.2, 1.2, 1.5])
+        c1, c2, c3, c4, c5, c6 = st.columns([0.5, 3.0, 1.8, 1.0, 1.6, 1.4])
         c1.write(f"#{index}")
         c2.write(item["file_name"])
         c3.write(item["uploaded_at"])
         c4.write(item.get("size_kb", ""))
+
         if file_path.exists():
-            c5.download_button(
-                "Download",
+            if c5.button("Generate Results", key=f"generate_saved_upload_{index}_{item['saved_name']}", use_container_width=True):
+                try:
+                    generate_dashboard_from_json_paths([file_path], [Path(item["file_name"]).stem])
+                    st.success("Generated dashboard, Excel report and chatbot from saved upload.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Failed to generate saved report: {exc}")
+
+            c6.download_button(
+                "Download JSON",
                 data=file_path.read_bytes(),
                 file_name=item["file_name"],
                 mime="application/json",
@@ -1670,6 +1730,8 @@ def render_latest_uploads_panel() -> None:
             )
         else:
             c5.warning("Missing")
+            c6.write("-")
+
 
 
 def render_main_page() -> None:

@@ -630,3 +630,11 @@ Changes added only:
 - Save uploaded reports checkbox.
 - Saves latest 5 uploaded JSON files under `saved_reports/`.
 - Allows team members to download latest saved uploads.
+
+
+## v77 Saved uploads can generate full report options
+
+- Latest saved JSON uploads are no longer only downloadable.
+- Each saved upload has `Generate Results`.
+- Latest saved uploads group has `Generate Results From Latest Saved Uploads`.
+- After generation, the normal Executive Dashboard / Excel Report / AI Chatbot options become available.
