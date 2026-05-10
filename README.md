@@ -657,3 +657,15 @@ Changes added only:
 - Removed JSON download button from saved reports table.
 - Saved reports show Region, Date/Duration and Generate action.
 - Main UI background updated with a more executive visual style.
+
+
+## v81 Devices + Dashboard Comparison Fix
+
+- Fixed device parsing for new saved uploads:
+  - 100KDevices
+  - 100K_Devices
+  - 100000Devices
+  - Devices100K
+- Saved report tooltip now backfills Devices when old metadata has N/A.
+- Dashboard Track Comparison now compares multiple reports correctly using a Run column and clean metric columns.
+- Overview Track Comparison Total section now shows total rows for every selected run/report.

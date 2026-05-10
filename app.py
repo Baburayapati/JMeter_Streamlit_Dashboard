@@ -1134,33 +1134,33 @@ def build_dashboard_track_comparison(run_frames: List[Dict[str, pd.DataFrame]]) 
         rows = []
         bucket_names = ["0-10sec %", "10-20sec %", "20-30sec %", ">30sec %"] if is_askai else ["0-2sec %", "3-4sec %", "4-6sec %", ">6sec %"]
 
-        # Total rows first, matching Excel Track_Comparison style.
-        for metric in ["Avg", "Min", "Max"]:
-            row = {"Track": "Total" if metric == "Avg" else "", "Metric": metric}
-            for frames in run_frames:
-                label = frames["Label"]
+        for frames in run_frames:
+            label = frames["Label"]
+            region = frames.get("Region", region_from_frames(frames))
+            run_label = f"{region} - {label}" if region and region != "Unknown" else label
+
+            # Total rows first for each report/run.
+            for metric in ["Avg", "Min", "Max"]:
+                row = {"Run": run_label, "Track": "Total" if metric == "Avg" else "", "Metric": metric}
                 api_df = frames["APIs"].copy()
                 if tracks:
                     api_df = api_df[api_df["Feature"].astype(str).isin(tracks)]
                 values = metric_bucket_summary_for_rows(api_df, metric, is_askai)
                 for name, value in zip(bucket_names + ["Max Seconds"], values):
                     row[name] = value
-            rows.append(row)
+                rows.append(row)
 
-        for track in tracks:
-            for metric in ["Avg", "Min", "Max"]:
-                row = {"Track": track if metric == "Avg" else "", "Metric": metric}
-                for frames in run_frames:
-                    label = frames["Label"]
+            for track in tracks:
+                for metric in ["Avg", "Min", "Max"]:
+                    row = {"Run": run_label, "Track": track if metric == "Avg" else "", "Metric": metric}
                     api_rows = frames["APIs"][frames["APIs"]["Feature"].astype(str) == str(track)]
                     values = metric_bucket_summary_for_rows(api_rows, metric, is_askai)
                     for name, value in zip(bucket_names + ["Max Seconds"], values):
                         row[name] = value
-                rows.append(row)
+                    rows.append(row)
         return pd.DataFrame(rows)
 
     return build_section(askai_tracks, True), build_section(other_tracks, False)
-
 
 
 def render_compare_tab(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
@@ -1383,13 +1383,13 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
 
         if not askai_compare.empty:
             st.markdown("#### AskAI Tracks - Total")
-            askai_total = askai_compare.iloc[:3].copy()
-            st.dataframe(askai_total, use_container_width=True, hide_index=True, height=160)
+            askai_total = askai_compare[askai_compare["Track"].eq("Total") | askai_compare["Track"].eq("")].copy()
+            st.dataframe(askai_total, use_container_width=True, hide_index=True, height=min(260, 80 + 35 * len(askai_total)))
 
         if not other_compare.empty:
             st.markdown("#### Assets / Assessments / Home / Settings / Support Tracks - Total")
-            other_total = other_compare.iloc[:3].copy()
-            st.dataframe(other_total, use_container_width=True, hide_index=True, height=160)
+            other_total = other_compare[other_compare["Track"].eq("Total") | other_compare["Track"].eq("")].copy()
+            st.dataframe(other_total, use_container_width=True, hide_index=True, height=min(260, 80 + 35 * len(other_total)))
 
         goto_tab_button('Open Full Track Comparison →', 'Track Comparison', 'overview_full_compare_btn')
         st.markdown("</div>", unsafe_allow_html=True)
@@ -1621,12 +1621,11 @@ def infer_saved_report_info(file_name: str) -> Dict[str, str]:
             break
 
     duration = "N/A"
-    duration_match = re.search(r"(\d+)\s*[_\-]?\s*(HOUR|HOURS|HR|HRS)", upper)
+    duration_match = re.search(r"(\d+)\s*[_\-\s]?\s*(HOUR|HOURS|HR|HRS)", upper)
     if duration_match:
         duration = f"{duration_match.group(1)} Hour"
 
     date = "N/A"
-    # Supports April-19-2026, April19-2026, Apr-19-2026, Apr19-2026
     date_match = re.search(
         r"(JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER|JAN|FEB|MAR|APR|JUN|JUL|AUG|SEP|SEPT|OCT|NOV|DEC)[_\- ]?(\d{1,2})[_\-, ]+(\d{4})",
         upper,
@@ -1638,19 +1637,29 @@ def infer_saved_report_info(file_name: str) -> Dict[str, str]:
         date = f"{month}-{day}-{year}"
 
     users = "N/A"
-    user_match = re.search(r"(\d+)\s*USERS?", upper)
-    if user_match:
-        users = user_match.group(1)
+    # Supports: 100Users, 100_Users, 100 Concurrent Users, ConcurrentUsers100
+    user_patterns = [
+        r"(\d+(?:\.\d+)?\s*K?)\s*[_\-\s]*(?:CONCURRENT[_\-\s]*)?USERS?",
+        r"(?:CONCURRENT[_\-\s]*)?USERS?[_\-\s]*(\d+(?:\.\d+)?\s*K?)",
+    ]
+    for pattern in user_patterns:
+        user_match = re.search(pattern, upper)
+        if user_match:
+            users = user_match.group(1).replace(" ", "")
+            break
 
     devices = "N/A"
-    # Supports: 100KDevices, 100K_Devices, 100000Devices, 100 Devices
-    device_match = re.search(r"(\d+\s*K?|\d+)\s*[_\-\s]*DEVICES?", upper)
-    if device_match:
-        devices = device_match.group(1).replace(" ", "")
-        if devices.endswith("K"):
-            devices = f"{devices} Devices"
-        else:
-            devices = f"{devices} Devices"
+    # Supports: 100KDevices, 100K_Devices, 100000Devices, 100 Devices, Devices100K
+    device_patterns = [
+        r"(\d+(?:\.\d+)?\s*K?)\s*[_\-\s]*DEVICES?",
+        r"DEVICES?[_\-\s]*(\d+(?:\.\d+)?\s*K?)",
+    ]
+    for pattern in device_patterns:
+        device_match = re.search(pattern, upper)
+        if device_match:
+            raw_devices = device_match.group(1).replace(" ", "")
+            devices = f"{raw_devices} Devices"
+            break
 
     return {
         "region": region,
@@ -1659,7 +1668,6 @@ def infer_saved_report_info(file_name: str) -> Dict[str, str]:
         "users": users,
         "devices": devices,
     }
-
 
 
 def normalize_saved_uploads(existing: List[Dict[str, str]]) -> List[Dict[str, str]]:
@@ -1911,7 +1919,9 @@ def render_latest_uploads_panel() -> None:
         date = item.get("date") or inferred.get("date", "N/A")
         duration = item.get("duration") or inferred.get("duration", "N/A")
         users = item.get("users") or inferred.get("users", "N/A")
-        devices = item.get("devices") or inferred.get("devices", "N/A")
+        devices = item.get("devices")
+        if not devices or str(devices).upper() == "N/A":
+            devices = inferred.get("devices", "N/A")
         report_info = f"{date} / {duration}"
         tooltip = f"Generate dashboard for: Region={region}, Date={date}, Duration={duration}, Users={users}, Devices={devices}"
 
