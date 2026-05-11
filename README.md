@@ -83,7 +83,30 @@ streamlit run app.py
 1. Open the Streamlit URL.
 2. Upload one JSON for normal report.
 3. Upload two or more JSONs for side-by-side comparison.
-4. Download Excel.
+4. Open the Executive Dashboard for leadership-ready KPIs, filters, trends and drilldowns.
+5. Download Excel or the Management Summary CSV for email/Teams sharing.
+
+## Management Sharing Workflow
+
+Use this flow when sharing results with team members or higher management:
+
+1. Upload the latest JMeter `statistics.json` file(s).
+2. Keep **Save uploaded reports for team visibility** enabled so the latest 5 uploads remain available on the landing page.
+3. Click **Generate Results**.
+4. Share the Executive Dashboard view for interactive review.
+5. Download **Management Summary CSV** for a short status update containing health status, SLA compliance, error rate, worst track and region attention points.
+6. Download **Excel Report** when detailed evidence is required.
+
+## Management Summary
+
+The app now includes a share-ready management summary on the landing page after report generation and at the top of the dashboard Overview tab.
+
+- Overall health status: Green, Amber or Red.
+- Health Score, SLA Compliance, Error Rate, Avg Response and P95 Response.
+- Total APIs, samples and errors.
+- Best region and region needing attention.
+- Worst track by P95 latency.
+- CSV download for quick email or Teams sharing.
 
 
 ## Latest v13 Updates

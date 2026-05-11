@@ -723,6 +723,85 @@ def summarize_run(df: pd.DataFrame) -> Dict[str, float]:
     )
 
 
+def health_label(score: float, error_rate: float, sla_compliance: float) -> Tuple[str, str]:
+    score = float(score or 0)
+    error_rate = float(error_rate or 0)
+    sla_compliance = float(sla_compliance or 0)
+    if score >= 95 and error_rate <= 1 and sla_compliance >= 95:
+        return "Green", "Stable for leadership review"
+    if score >= 85 and error_rate <= 3 and sla_compliance >= 85:
+        return "Amber", "Monitor SLA breaches and errors"
+    return "Red", "Needs performance investigation"
+
+
+def management_summary(run_frames: List[Dict[str, pd.DataFrame]]) -> Tuple[pd.DataFrame, List[str]]:
+    df = combined_df(run_frames)
+    summary = summarize_run(df)
+    status, status_note = health_label(summary["performance_score"], summary["error_rate"], summary["sla_compliance"])
+    tracks = track_summary(df)
+
+    worst_track = "N/A"
+    worst_track_p95 = 0
+    if not tracks.empty:
+        worst_track = str(tracks.iloc[0].get("Feature", "N/A"))
+        worst_track_p95 = tracks.iloc[0].get("P95_Sec", 0)
+
+    rows = []
+    for frames in run_frames:
+        row = summarize_run(frames["APIs"])
+        row["Run"] = run_display_label(frames)
+        row["Region"] = frames.get("Region", region_from_frames(frames))
+        row["Health Status"], row["Action"] = health_label(row["performance_score"], row["error_rate"], row["sla_compliance"])
+        rows.append(row)
+    regional = pd.DataFrame(rows)
+
+    best_region = "N/A"
+    attention_region = "N/A"
+    if not regional.empty:
+        best_region = str(regional.sort_values(["sla_compliance", "error_rate"], ascending=[False, True]).iloc[0].get("Region", "N/A"))
+        attention_region = str(regional.sort_values(["error_rate", "p95_sec"], ascending=[False, False]).iloc[0].get("Region", "N/A"))
+
+    summary_df = pd.DataFrame([
+        {"Metric": "Overall Health", "Value": f"{status} - {status_note}"},
+        {"Metric": "Health Score", "Value": f"{summary['performance_score']}/100"},
+        {"Metric": "SLA Compliance", "Value": f"{summary['sla_compliance']}%"},
+        {"Metric": "Error Rate", "Value": f"{summary['error_rate']}%"},
+        {"Metric": "Avg Response", "Value": f"{summary['avg_sec']} sec"},
+        {"Metric": "P95 Response", "Value": f"{summary['p95_sec']} sec"},
+        {"Metric": "Total APIs", "Value": f"{summary['transactions']:,}"},
+        {"Metric": "Total Samples", "Value": f"{summary['samples']:,}"},
+        {"Metric": "Total Errors", "Value": f"{summary['errors']:,}"},
+        {"Metric": "Best Region", "Value": best_region},
+        {"Metric": "Region Needing Attention", "Value": attention_region},
+        {"Metric": "Worst Track by P95", "Value": f"{worst_track} ({round(float(worst_track_p95 or 0), 2)} sec)"},
+    ])
+
+    bullets = [
+        f"Overall status is {status}: {status_note.lower()}.",
+        f"SLA compliance is {summary['sla_compliance']}% with {summary['errors']:,} failed samples out of {summary['samples']:,} total samples.",
+        f"Worst track by P95 latency is {worst_track} at {round(float(worst_track_p95 or 0), 2)} sec.",
+        f"Best region is {best_region}; region needing attention is {attention_region}.",
+    ]
+    return summary_df, bullets
+
+
+def render_management_summary(run_frames: List[Dict[str, pd.DataFrame]], key_suffix: str) -> None:
+    summary_df, bullets = management_summary(run_frames)
+    st.markdown('<div class="panel"><div class="panel-title">MANAGEMENT SUMMARY <span class="tag">Share-ready</span></div>', unsafe_allow_html=True)
+    for bullet in bullets:
+        st.markdown(f"- {bullet}")
+    st.dataframe(summary_df, use_container_width=True, hide_index=True, height=455)
+    st.download_button(
+        "Download Management Summary CSV",
+        data=summary_df.to_csv(index=False).encode("utf-8"),
+        file_name="JMeter_Management_Summary.csv",
+        mime="text/csv",
+        key=f"management_summary_csv_{key_suffix}",
+        use_container_width=True,
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
 def safe_cols(df: pd.DataFrame, cols: List[str]) -> List[str]:
     return [c for c in cols if c in df.columns]
 
@@ -1348,6 +1427,25 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
             render_reports_tab()
             return
         kpi_cards(df)
+
+        m1, m2 = st.columns([1.15, 1], gap="medium")
+        with m1:
+            render_management_summary(selected_frames, "overview")
+        with m2:
+            st.markdown('<div class="panel"><div class="panel-title">LEADERSHIP ACTIONS <span class="tag">Next steps</span></div>', unsafe_allow_html=True)
+            attention = track_summary(df).head(5)
+            if attention.empty:
+                st.info("No track-level performance risks found in the selected data.")
+            else:
+                st.write("Prioritize these areas before the next performance review:")
+                st.dataframe(
+                    attention[safe_cols(attention, ["Feature", "P95_Sec", "Avg_Sec", "Max_Sec", "Errors", "SLA Fail %"])],
+                    use_container_width=True,
+                    hide_index=True,
+                    height=300,
+                )
+            goto_tab_button('Open Drilldown →', 'Drilldown', 'leadership_drilldown_btn')
+            st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown('<div class="grid-3">', unsafe_allow_html=True)
         # Streamlit does not nest into raw grid well; use columns instead.
@@ -2160,6 +2258,10 @@ def render_action_cards() -> None:
             st.markdown('<div class="action-card-text">Open the dashboard chatbot and ask questions about SLA, slow APIs, errors, regions and comparisons.</div>', unsafe_allow_html=True)
             link_class = "action-link purple" if has_report else "action-link disabled"
             st.markdown(f'<a class="{link_class}" href="{chatbot_href}" target="_blank">Open Chatbot ↗</a>', unsafe_allow_html=True)
+
+    if has_report and st.session_state.get("run_frames"):
+        st.markdown("---")
+        render_management_summary(st.session_state.run_frames, "main")
 
 
 
