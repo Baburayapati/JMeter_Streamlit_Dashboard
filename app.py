@@ -817,9 +817,47 @@ def top_nav() -> str:
     return current_tab
 
 
-def kpi_cards(df: pd.DataFrame) -> None:
+def kpi_cards(df: pd.DataFrame, previous_df: pd.DataFrame | None = None, title: str = "AGGREGATED PERFORMANCE OVERVIEW METRICS") -> None:
     s = summarize_run(df)
     sla_fail = round(100 - s["sla_compliance"], 2) if s["transactions"] else 0
+
+    previous = summarize_run(previous_df) if previous_df is not None else None
+
+    def delta_html(current: float, previous_value: float | None, suffix: str = "", lower_is_better: bool = False) -> str:
+        if previous_value is None:
+            return ""
+        diff = round(float(current or 0) - float(previous_value or 0), 2)
+        good = diff <= 0 if lower_is_better else diff >= 0
+        arrow = "▲" if diff >= 0 else "▼"
+        css_class = "good" if good else "bad"
+        sign = "+" if diff > 0 else ""
+        return f'<div class="agg-delta {css_class}">{arrow} {sign}{diff:g}{suffix} vs prev</div>'
+
+    previous_sla_fail = round(100 - previous["sla_compliance"], 2) if previous else None
+    health_delta = delta_html(s["performance_score"], previous["performance_score"] if previous else None)
+    sla_pass_delta = delta_html(s["sla_compliance"], previous["sla_compliance"] if previous else None, "%")
+    sla_fail_delta = delta_html(sla_fail, previous_sla_fail, "%", lower_is_better=True)
+    apis_delta = delta_html(s["transactions"], previous["transactions"] if previous else None)
+    samples_delta = delta_html(s["samples"], previous["samples"] if previous else None)
+    errors_delta = delta_html(s["errors"], previous["errors"] if previous else None, lower_is_better=True)
+
+    if not health_delta:
+        health_delta = """
+        <svg class="agg-spark" viewBox="0 0 130 28" xmlns="http://www.w3.org/2000/svg">
+          <polyline points="2,20 16,19 29,20 42,17 55,18 68,11 81,16 94,18 107,9 124,14 129,8"
+            fill="none" stroke="#22a447" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        """
+    if not sla_pass_delta:
+        sla_pass_delta = '<div class="agg-delta good">▲ APIs meeting SLA</div>'
+    if not sla_fail_delta:
+        sla_fail_delta = '<div class="agg-delta bad">▼ APIs breaching SLA</div>'
+    if not apis_delta:
+        apis_delta = '<div class="agg-delta good">▲ Compared APIs</div>'
+    if not samples_delta:
+        samples_delta = '<div class="agg-delta good">▲ Executed samples</div>'
+    if not errors_delta:
+        errors_delta = '<div class="agg-delta bad">▼ Failed samples</div>'
 
     html = f"""
 <!DOCTYPE html>
@@ -921,7 +959,7 @@ body {{
 </head>
 <body>
 <div class="agg-summary-card">
-  <div class="agg-summary-title">AGGREGATED PERFORMANCE OVERVIEW METRICS</div>
+  <div class="agg-summary-title">{title}</div>
   <div class="agg-kpi-row">
 
     <div class="agg-kpi">
@@ -929,10 +967,7 @@ body {{
       <div>
         <div class="agg-label">Health Score</div>
         <div class="agg-value">{s['performance_score']}<span class="agg-suffix">/100</span></div>
-        <svg class="agg-spark" viewBox="0 0 130 28" xmlns="http://www.w3.org/2000/svg">
-          <polyline points="2,20 16,19 29,20 42,17 55,18 68,11 81,16 94,18 107,9 124,14 129,8"
-            fill="none" stroke="#22a447" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+        {health_delta}
       </div>
     </div>
 
@@ -941,7 +976,7 @@ body {{
       <div>
         <div class="agg-label">SLA Pass %</div>
         <div class="agg-value">{s['sla_compliance']}%</div>
-        <div class="agg-delta good">▲ APIs meeting SLA</div>
+        {sla_pass_delta}
       </div>
     </div>
 
@@ -950,7 +985,7 @@ body {{
       <div>
         <div class="agg-label">SLA Fail %</div>
         <div class="agg-value">{sla_fail}%</div>
-        <div class="agg-delta bad">▼ APIs breaching SLA</div>
+        {sla_fail_delta}
       </div>
     </div>
 
@@ -959,7 +994,7 @@ body {{
       <div>
         <div class="agg-label">Total APIs</div>
         <div class="agg-value">{s['transactions']:,}</div>
-        <div class="agg-delta good">▲ Compared APIs</div>
+        {apis_delta}
       </div>
     </div>
 
@@ -968,7 +1003,7 @@ body {{
       <div>
         <div class="agg-label">Total Samples</div>
         <div class="agg-value">{s['samples']:,}</div>
-        <div class="agg-delta good">▲ Executed samples</div>
+        {samples_delta}
       </div>
     </div>
 
@@ -977,7 +1012,7 @@ body {{
       <div>
         <div class="agg-label">Total Errors</div>
         <div class="agg-value">{s['errors']:,}</div>
-        <div class="agg-delta bad">▼ Failed samples</div>
+        {errors_delta}
       </div>
     </div>
 
@@ -1022,9 +1057,13 @@ def render_aggregated_or_comparison_summary(run_frames: List[Dict[str, pd.DataFr
         kpi_cards(combined_df(run_frames))
         return
 
+    current_df = run_frames[-1]["APIs"]
+    previous_df = run_frames[-2]["APIs"] if len(run_frames) > 1 else None
+    kpi_cards(current_df, previous_df=previous_df, title="AGGREGATED PERFORMANCE OVERVIEW METRICS")
+
     summary = build_run_summary_table(run_frames)
-    st.markdown('<div class="panel"><div class="panel-title">AGGREGATED PERFORMANCE OVERVIEW METRICS <span class="tag">Per result vs baseline</span></div>', unsafe_allow_html=True)
-    st.caption("For multiple uploads, values are shown by result and the Diff columns compare each result against the first selected result instead of cumulating all reports.")
+    st.markdown('<div class="panel"><div class="panel-title">COMPARISON SUMMARY <span class="tag">Per result vs baseline</span></div>', unsafe_allow_html=True)
+    st.caption("The KPI strip above uses the latest selected result and compares it against the previous selected result. The table below compares each result against the first selected result.")
     st.dataframe(summary, use_container_width=True, hide_index=True, height=245)
 
     chart_df = summary.melt(
