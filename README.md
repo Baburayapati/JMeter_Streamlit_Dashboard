@@ -731,3 +731,10 @@ Changes added only:
 
 - Fixed Overview Track Comparison Total tables so Avg, Min and Max rows all remain visible after grouped-row formatting.
 - Added an internal track key for filtering while keeping the displayed table clean.
+
+
+## v88 Executive UI polish
+
+- Renamed the saved uploads action to `Generate Comparison Dashboard` when multiple saved reports are available.
+- Improved dashboard tab styling with stronger active-tab highlighting and compact icon markers.
+- Updated dashboard header, panels, side cards, tables and buttons with a more management-ready executive look.

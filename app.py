@@ -164,17 +164,18 @@ div[role="radiogroup"] label:has(input:checked) {
 .agg-summary-card {
     background:#ffffff;
     border:1px solid #dbe4f0;
-    border-radius:14px;
+    border-radius:18px;
     padding:0 0 12px 0;
-    box-shadow:0 8px 22px rgba(15,23,42,.045);
-    margin-bottom:14px;
+    box-shadow:0 18px 42px rgba(15,23,42,.075);
+    margin-bottom:16px;
+    overflow:hidden;
 }
 .agg-summary-title {
     display:inline-block;
-    background:linear-gradient(90deg,#2333a3,#3152d9);
+    background:linear-gradient(90deg,#0f2b68,#2563eb 60%,#7c3aed);
     color:#ffffff;
     padding:9px 18px;
-    border-radius:12px 12px 12px 0;
+    border-radius:0 0 14px 0;
     font-size:15px;
     font-weight:900;
     letter-spacing:.2px;
@@ -190,7 +191,7 @@ div[role="radiogroup"] label:has(input:checked) {
     display:flex;
     align-items:center;
     gap:14px;
-    min-height:130px;
+    min-height:122px;
     padding:10px 18px;
     border-right:1px solid #e5edf7;
 }
@@ -198,9 +199,9 @@ div[role="radiogroup"] label:has(input:checked) {
     border-right:none;
 }
 .agg-icon {
-    width:44px;
-    height:44px;
-    border-radius:10px;
+    width:48px;
+    height:48px;
+    border-radius:14px;
     color:#fff;
     display:flex;
     align-items:center;
@@ -208,7 +209,7 @@ div[role="radiogroup"] label:has(input:checked) {
     font-size:23px;
     font-weight:900;
     box-shadow:0 10px 20px rgba(15,23,42,.16);
-    flex:0 0 44px;
+    flex:0 0 48px;
 }
 .agg-label {
     font-size:13px;
@@ -267,38 +268,58 @@ div[role="radiogroup"] label:has(input:checked) {
 .dash-tabs {
     display:flex;
     justify-content:center;
-    gap:12px;
-    background:#ffffff;
-    border:1px solid #dbe4f0;
-    border-radius:14px;
-    padding:10px;
-    margin:0 0 14px 0;
-    box-shadow:0 8px 20px rgba(15,23,42,.045);
+    gap:10px;
+    background:rgba(255,255,255,.86);
+    border:1px solid rgba(148,163,184,.22);
+    border-radius:18px;
+    padding:11px;
+    margin:0 0 16px 0;
+    box-shadow:0 18px 42px rgba(15,23,42,.08);
+    backdrop-filter: blur(14px);
     flex-wrap:wrap;
 }
 .dash-tab {
     text-decoration:none !important;
-    background:#f8fbff;
-    border:1px solid #e0e7f3;
-    border-radius:12px;
-    padding:9px 14px;
-    min-width:118px;
+    background:linear-gradient(180deg,#ffffff,#f8fbff);
+    border:1px solid #d8e4f5;
+    border-radius:999px;
+    padding:10px 16px;
+    min-width:124px;
     text-align:center;
-    font-weight:850;
-    color:#0f2b68 !important;
-    transition:.15s ease-in-out;
+    font-weight:900;
+    color:#16366f !important;
+    transition:.16s ease-in-out;
     display:inline-block;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.9);
+}
+.dash-tab-icon {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:19px;
+    height:19px;
+    margin-right:7px;
+    border-radius:999px;
+    background:#eaf1ff;
+    color:#2563eb;
+    font-size:11px;
+    font-weight:900;
 }
 .dash-tab:hover {
     border-color:#2563eb;
-    box-shadow:0 8px 18px rgba(37,99,235,.12);
+    box-shadow:0 10px 24px rgba(37,99,235,.16);
     transform:translateY(-1px);
+    color:#1d4ed8 !important;
 }
 .dash-tab.active {
-    background:linear-gradient(90deg,#4f46e5,#2563eb);
+    background:linear-gradient(90deg,#0f2b68,#2563eb 55%,#7c3aed);
     color:#ffffff !important;
     border-color:transparent;
-    box-shadow:0 12px 24px rgba(37,99,235,.28);
+    box-shadow:0 14px 30px rgba(37,99,235,.34);
+}
+.dash-tab.active .dash-tab-icon {
+    background:rgba(255,255,255,.22);
+    color:white;
 }
 
 
@@ -313,12 +334,33 @@ div[role="radiogroup"] label:has(input:checked) {
   border: 1px solid rgba(37,99,235,.12) !important;
   box-shadow: 0 14px 34px rgba(15,23,42,.08) !important;
 }
+.main-page-card {
+  background:rgba(255,255,255,.94) !important;
+  border-radius:20px !important;
+  backdrop-filter: blur(12px) !important;
+}
 .stFileUploader {
   background: rgba(255,255,255,.92) !important;
   border: 1px dashed rgba(37,99,235,.28) !important;
   border-radius: 18px !important;
   padding: 14px !important;
   box-shadow: 0 10px 28px rgba(15,23,42,.06) !important;
+}
+.stButton > button, .stDownloadButton > button {
+  border-radius:14px !important;
+  border:1px solid rgba(37,99,235,.18) !important;
+  box-shadow:0 10px 24px rgba(15,23,42,.07) !important;
+  min-height:44px !important;
+}
+.stButton > button:hover, .stDownloadButton > button:hover {
+  border-color:#2563eb !important;
+  box-shadow:0 14px 28px rgba(37,99,235,.16) !important;
+  transform:translateY(-1px) !important;
+}
+.stDataFrame, [data-testid="stDataFrame"] {
+  border-radius:16px !important;
+  overflow:hidden !important;
+  box-shadow:0 12px 28px rgba(15,23,42,.045) !important;
 }
 
 </style>
@@ -425,12 +467,13 @@ st.markdown(
   display:flex;
   align-items:center;
   justify-content:space-between;
-  background: linear-gradient(90deg,#07132f,#0a1b3f);
+  background:linear-gradient(90deg,#0f2b68,#2563eb 55%,#7c3aed);
   color:white;
-  border-radius: 0 0 14px 14px;
-  padding: 12px 18px;
-  margin: -0.6rem -1rem 14px -1rem;
-  box-shadow: 0 8px 22px rgba(7,19,47,.14);
+  border-radius: 0 0 22px 22px;
+  padding: 16px 22px;
+  margin: -0.6rem -1rem 16px -1rem;
+  box-shadow: 0 18px 42px rgba(7,19,47,.20);
+  border-bottom: 1px solid rgba(255,255,255,.16);
 }
 .brand {
   display:flex;
@@ -443,8 +486,8 @@ st.markdown(
   display:flex;align-items:center;justify-content:center;
   font-size:18px;
 }
-.brand-title { font-size:19px;font-weight:850;line-height:1.1; }
-.brand-sub { font-size:11px;color:rgba(255,255,255,.72);margin-top:2px;}
+.brand-title { font-size:21px;font-weight:900;line-height:1.1;letter-spacing:-.25px; }
+.brand-sub { font-size:12px;color:rgba(255,255,255,.78);margin-top:3px;}
 .nav-tabs {
   display:flex;
   gap: 8px;
@@ -464,28 +507,31 @@ st.markdown(
 }
 .nav-time {font-size:11px;color:rgba(255,255,255,.82);text-align:right;}
 .panel {
-  background: white;
-  border: 1px solid var(--border);
-  border-radius: 13px;
-  padding: 14px;
-  box-shadow: 0 8px 20px rgba(15,23,42,.045);
-  margin-bottom: 12px;
+  background: rgba(255,255,255,.94);
+  border: 1px solid rgba(148,163,184,.24);
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: 0 18px 42px rgba(15,23,42,.075);
+  margin-bottom: 16px;
+  backdrop-filter: blur(10px);
 }
 .panel-title {
-  font-size: 14px;
-  font-weight: 850;
-  color: #0f2b68;
-  margin-bottom: 12px;
+  font-size: 15px;
+  font-weight: 900;
+  color: #102a63;
+  margin-bottom: 14px;
   display:flex;
   align-items:center;
   justify-content:space-between;
+  letter-spacing:.16px;
 }
 .panel-title .tag {
   font-size:11px;
-  background:#eef4ff;
-  color:#2563eb;
-  padding:3px 8px;
+  background:linear-gradient(90deg,#eef4ff,#f5f3ff);
+  color:#1d4ed8;
+  padding:4px 10px;
   border-radius:999px;
+  border:1px solid #dbeafe;
 }
 .kpi-grid {
   display:grid;
@@ -525,12 +571,13 @@ st.markdown(
   gap:12px;
 }
 .side-card {
-  background:white;
-  border:1px solid var(--border);
-  border-radius:13px;
-  padding:14px;
-  box-shadow: 0 8px 20px rgba(15,23,42,.045);
-  margin-bottom:12px;
+  background: rgba(255,255,255,.94);
+  border:1px solid rgba(148,163,184,.24);
+  border-radius:18px;
+  padding:16px;
+  box-shadow: 0 18px 40px rgba(15,23,42,.075);
+  margin-bottom:16px;
+  backdrop-filter: blur(10px);
 }
 .insight-item {
   display:flex;
@@ -782,20 +829,30 @@ def top_nav() -> str:
 
     current_run_id = params.get("run_id", "") or st.session_state.get("run_id", "")
     tabs = [
-        ("Overview", "🏠 Overview"),
-        ("Track Comparison", "📊 Track Comparison"),
-        ("Compare", "🌐 Compare"),
-        ("Trends", "📈 Trends"),
-        ("Drilldown", "🔎 Drilldown"),
-        ("Reports", "📄 Reports"),
-        ("Chatbot", "💬 Chatbot"),
+        ("Overview", "Overview"),
+        ("Track Comparison", "Track Comparison"),
+        ("Compare", "Compare"),
+        ("Trends", "Trends"),
+        ("Drilldown", "Drilldown"),
+        ("Reports", "Reports"),
+        ("Chatbot", "AI Chatbot"),
     ]
+
+    icons = {
+        "Overview": "◆",
+        "Track Comparison": "▦",
+        "Compare": "⇄",
+        "Trends": "↗",
+        "Drilldown": "⌕",
+        "Reports": "▤",
+        "Chatbot": "●",
+    }
 
     links = ""
     for tab_value, tab_label in tabs:
         active_class = " active" if tab_value == current_tab else ""
         href = f"?view=dashboard&run_id={current_run_id}&tab={tab_value}"
-        links += f'<a class="dash-tab{active_class}" href="{href}">{tab_label}</a>'
+        links += f'<a class="dash-tab{active_class}" href="{href}"><span class="dash-tab-icon">{icons[tab_value]}</span>{tab_label}</a>'
 
     st.markdown(
         f"""
@@ -2067,8 +2124,9 @@ def render_latest_uploads_panel() -> None:
             saved_labels.append(Path(item["file_name"]).stem)
 
     if saved_paths:
-        st.caption(f"Generate comparison/dashboard using latest {len(saved_paths)} saved report(s).")
-        if st.button("Generate Results From Latest Saved Uploads", key="generate_all_saved_uploads", use_container_width=True):
+        st.caption(f"Generate an executive dashboard and comparison report using the latest {len(saved_paths)} saved report(s).")
+        saved_button_label = "Generate Comparison Dashboard" if len(saved_paths) > 1 else "Generate Dashboard From Latest Upload"
+        if st.button(saved_button_label, key="generate_all_saved_uploads", use_container_width=True):
             try:
                 generate_dashboard_from_json_paths(saved_paths, saved_labels)
                 st.success(f"Generated dashboard, Excel report and chatbot from latest {len(saved_paths)} saved report(s).")
