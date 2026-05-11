@@ -1269,6 +1269,7 @@ def build_dashboard_track_comparison(run_frames: List[Dict[str, pd.DataFrame]]) 
                 for metric_index, metric in enumerate(["Avg", "Min", "Max"]):
                     values = metric_bucket_summary_for_rows(api_rows, metric, is_askai)
                     row = {
+                        "_TrackKey": target,
                         "Track": target if first_target_row else "",
                         "Result": display_label if metric_index == 0 else "",
                         "Metric": metric,
@@ -1283,6 +1284,10 @@ def build_dashboard_track_comparison(run_frames: List[Dict[str, pd.DataFrame]]) 
     return build_section(askai_tracks, True), build_section(other_tracks, False)
 
 
+def display_track_comparison_df(df: pd.DataFrame) -> pd.DataFrame:
+    return df.drop(columns=["_TrackKey"], errors="ignore")
+
+
 def render_compare_tab(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
     st.markdown('<div class="panel"><div class="panel-title">TRACK COMPARISON <span class="tag">Grouped by result</span></div>', unsafe_allow_html=True)
 
@@ -1291,14 +1296,14 @@ def render_compare_tab(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
     st.markdown("### AskAI Tracks")
     st.caption("Result includes the region. Repeated Track and Result cells are intentionally blank to keep Avg, Min and Max rows grouped together.")
     if not askai_df.empty:
-        st.dataframe(askai_df, use_container_width=True, hide_index=True, height=420)
+        st.dataframe(display_track_comparison_df(askai_df), use_container_width=True, hide_index=True, height=420)
     else:
         st.info("No AskAI tracks found.")
 
     st.markdown("### Assets / Assessments / Home / Settings / Support Tracks")
     st.caption("Result includes the region. Repeated Track and Result cells are intentionally blank to keep Avg, Min and Max rows grouped together.")
     if not other_df.empty:
-        st.dataframe(other_df, use_container_width=True, hide_index=True, height=620)
+        st.dataframe(display_track_comparison_df(other_df), use_container_width=True, hide_index=True, height=620)
     else:
         st.info("No non-AskAI tracks found.")
 
@@ -1507,13 +1512,13 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
 
         if not askai_compare.empty:
             st.markdown("#### AskAI Tracks - Total")
-            askai_total = askai_compare[askai_compare["Track"] == "Total"].copy()
-            st.dataframe(askai_total, use_container_width=True, hide_index=True, height=220)
+            askai_total = askai_compare[askai_compare["_TrackKey"] == "Total"].copy()
+            st.dataframe(display_track_comparison_df(askai_total), use_container_width=True, hide_index=True, height=220)
 
         if not other_compare.empty:
             st.markdown("#### Assets / Assessments / Home / Settings / Support Tracks - Total")
-            other_total = other_compare[other_compare["Track"] == "Total"].copy()
-            st.dataframe(other_total, use_container_width=True, hide_index=True, height=220)
+            other_total = other_compare[other_compare["_TrackKey"] == "Total"].copy()
+            st.dataframe(display_track_comparison_df(other_total), use_container_width=True, hide_index=True, height=220)
 
         goto_tab_button('Open Full Track Comparison →', 'Track Comparison', 'overview_full_compare_btn')
         st.markdown("</div>", unsafe_allow_html=True)

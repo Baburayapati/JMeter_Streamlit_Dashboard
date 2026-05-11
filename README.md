@@ -725,3 +725,9 @@ Changes added only:
 
 - Removed the separate Region column from dashboard Track Comparison because Region is already shown in Result.
 - Grouped repeated Track and Result values by leaving duplicate cells blank across Avg, Min and Max rows.
+
+
+## v87 Overview total metric rows fix
+
+- Fixed Overview Track Comparison Total tables so Avg, Min and Max rows all remain visible after grouped-row formatting.
+- Added an internal track key for filtering while keeping the displayed table clean.
