@@ -370,6 +370,7 @@ st.set_page_config(page_title=APP_TITLE, layout="wide")
 
 params = st.query_params
 dashboard_only = params.get("view", "") == "dashboard"
+team_upload_view = params.get("view", "") in ["team-upload", "upload"]
 run_id = params.get("run_id", "")
 
 
@@ -822,7 +823,9 @@ def top_nav() -> str:
     if "nav_target" in st.session_state:
         current_tab = st.session_state.pop("nav_target")
 
-    valid_tabs = ["Overview", "Track Comparison", "Compare", "Trends", "Drilldown", "Reports", "Chatbot"]
+    valid_tabs = ["Overview", "Track Comparison", "Trends", "Detailed Report", "Chatbot"]
+    legacy_tabs = {"Drilldown": "Detailed Report", "Compare": "Track Comparison", "Reports": "Overview"}
+    current_tab = legacy_tabs.get(current_tab, current_tab)
     if current_tab not in valid_tabs:
         current_tab = "Overview"
     st.session_state["dashboard_tab"] = current_tab
@@ -831,20 +834,16 @@ def top_nav() -> str:
     tabs = [
         ("Overview", "Overview"),
         ("Track Comparison", "Track Comparison"),
-        ("Compare", "Compare"),
         ("Trends", "Trends"),
-        ("Drilldown", "Drilldown"),
-        ("Reports", "Reports"),
+        ("Detailed Report", "Detailed Report"),
         ("Chatbot", "AI Chatbot"),
     ]
 
     icons = {
         "Overview": "◆",
         "Track Comparison": "▦",
-        "Compare": "⇄",
         "Trends": "↗",
-        "Drilldown": "⌕",
-        "Reports": "▤",
+        "Detailed Report": "⌕",
         "Chatbot": "●",
     }
 
@@ -874,7 +873,7 @@ def top_nav() -> str:
     return current_tab
 
 
-def kpi_cards(df: pd.DataFrame, previous_df: pd.DataFrame | None = None, title: str = "AGGREGATED PERFORMANCE OVERVIEW METRICS") -> None:
+def kpi_cards(df: pd.DataFrame, previous_df: pd.DataFrame | None = None, title: str = "AGGREGATED PERFORMANCE OVERVIEW METRICS", compact: bool = False) -> None:
     s = summarize_run(df)
     sla_fail = round(100 - s["sla_compliance"], 2) if s["transactions"] else 0
 
@@ -916,6 +915,38 @@ def kpi_cards(df: pd.DataFrame, previous_df: pd.DataFrame | None = None, title: 
     if not errors_delta:
         errors_delta = '<div class="agg-delta bad">▼ Failed samples</div>'
 
+    extra_cards = "" if compact else f"""
+    <div class="agg-kpi">
+      <div class="agg-icon" style="background:linear-gradient(135deg,#2563eb,#3152d9);">♜</div>
+      <div>
+        <div class="agg-label">Total APIs</div>
+        <div class="agg-value">{s['transactions']:,}</div>
+        {apis_delta}
+      </div>
+    </div>
+
+    <div class="agg-kpi">
+      <div class="agg-icon" style="background:linear-gradient(135deg,#7c3aed,#a855f7);">◉</div>
+      <div>
+        <div class="agg-label">Total Samples</div>
+        <div class="agg-value">{s['samples']:,}</div>
+        {samples_delta}
+      </div>
+    </div>
+
+    <div class="agg-kpi">
+      <div class="agg-icon" style="background:#dc2626;">⚠</div>
+      <div>
+        <div class="agg-label">Total Errors</div>
+        <div class="agg-value">{s['errors']:,}</div>
+        {errors_delta}
+      </div>
+    </div>
+    """
+
+    columns = 3 if compact else 6
+    component_height = 205 if not compact else 190
+
     html = f"""
 <!DOCTYPE html>
 <html>
@@ -946,7 +977,7 @@ body {{
 }}
 .agg-kpi-row {{
     display:grid;
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat({columns}, 1fr);
     gap:0;
     padding:10px 16px 0 16px;
 }}
@@ -1046,39 +1077,14 @@ body {{
       </div>
     </div>
 
-    <div class="agg-kpi">
-      <div class="agg-icon" style="background:linear-gradient(135deg,#2563eb,#3152d9);">♜</div>
-      <div>
-        <div class="agg-label">Total APIs</div>
-        <div class="agg-value">{s['transactions']:,}</div>
-        {apis_delta}
-      </div>
-    </div>
-
-    <div class="agg-kpi">
-      <div class="agg-icon" style="background:linear-gradient(135deg,#7c3aed,#a855f7);">◉</div>
-      <div>
-        <div class="agg-label">Total Samples</div>
-        <div class="agg-value">{s['samples']:,}</div>
-        {samples_delta}
-      </div>
-    </div>
-
-    <div class="agg-kpi">
-      <div class="agg-icon" style="background:#dc2626;">⚠</div>
-      <div>
-        <div class="agg-label">Total Errors</div>
-        <div class="agg-value">{s['errors']:,}</div>
-        {errors_delta}
-      </div>
-    </div>
+    {extra_cards}
 
   </div>
 </div>
 </body>
 </html>
 """
-    components.html(html, height=205, scrolling=False)
+    components.html(html, height=component_height, scrolling=False)
 
 
 def build_run_summary_table(run_frames: List[Dict[str, pd.DataFrame]]) -> pd.DataFrame:
@@ -1111,12 +1117,12 @@ def build_run_summary_table(run_frames: List[Dict[str, pd.DataFrame]]) -> pd.Dat
 
 def render_aggregated_or_comparison_summary(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
     if len(run_frames) <= 1:
-        kpi_cards(combined_df(run_frames))
+        kpi_cards(combined_df(run_frames), compact=True)
         return
 
     current_df = run_frames[-1]["APIs"]
     previous_df = run_frames[-2]["APIs"] if len(run_frames) > 1 else None
-    kpi_cards(current_df, previous_df=previous_df, title="AGGREGATED PERFORMANCE OVERVIEW METRICS")
+    kpi_cards(current_df, previous_df=previous_df, title="AGGREGATED PERFORMANCE OVERVIEW METRICS", compact=True)
 
     summary = build_run_summary_table(run_frames)
     st.markdown('<div class="panel"><div class="panel-title">COMPARISON SUMMARY <span class="tag">Per result vs baseline</span></div>', unsafe_allow_html=True)
@@ -1133,14 +1139,6 @@ def render_aggregated_or_comparison_summary(run_frames: List[Dict[str, pd.DataFr
     fig.update_traces(texttemplate="%{text:.2f}", textposition="outside")
     fig.update_layout(height=320, margin=dict(l=8, r=12, t=10, b=85), xaxis_title="", yaxis_title="Difference vs baseline")
     st.plotly_chart(fig, use_container_width=True)
-    st.download_button(
-        "Download Result Difference Summary CSV",
-        data=summary.to_csv(index=False).encode("utf-8"),
-        file_name="JMeter_Result_Difference_Summary.csv",
-        mime="text/csv",
-        key="result_difference_summary_csv",
-        use_container_width=True,
-    )
     st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -1390,9 +1388,9 @@ def render_trends_tab(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-def render_drilldown_tab(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
+def render_detailed_report_tab(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
     df = combined_df(run_frames)
-    st.markdown('<div class="panel"><div class="panel-title">DRILLDOWN DATA</div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel"><div class="panel-title">DETAILED REPORT</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     tracks = sorted(df["Feature"].dropna().astype(str).unique().tolist())
     selected_tracks = c1.multiselect("Track", tracks, default=tracks[: min(10, len(tracks))])
@@ -1400,20 +1398,6 @@ def render_drilldown_tab(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
     sort_col = c3.selectbox("Sort by", ["Avg ResTime in sec", "95thPercentile Resp Time in Sec", "99thPercentile Resp Time in Sec", "MaxRes Time in sec", "errorCount", "sampleCount"])
     filtered = df[df["Feature"].isin(selected_tracks) & df["SLA Status"].isin(selected_status)].sort_values(sort_col, ascending=False)
     st.dataframe(filtered[standard_api_cols(filtered)], use_container_width=True, hide_index=True, height=650)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-def render_reports_tab() -> None:
-    st.markdown('<div class="panel"><div class="panel-title">REPORTS</div>', unsafe_allow_html=True)
-    st.write("Download the generated Excel workbook from the upload page, or return to the upload page and generate a fresh report.")
-    if st.session_state.get("excel_bytes"):
-        st.download_button(
-            "Download Excel Report",
-            data=st.session_state.excel_bytes,
-            file_name=st.session_state.report_file_name,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="reports_tab_excel_download",
-        )
     st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -1431,6 +1415,20 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
     with side_col:
         selected_frames = get_filtered_frames(run_frames)
         insights = auto_insights(selected_frames)
+        st.markdown('<div class="side-card"><div class="panel-title">REPORT ACTIONS</div>', unsafe_allow_html=True)
+        if st.session_state.get("excel_bytes"):
+            st.download_button(
+                "Download Excel Report",
+                data=st.session_state.excel_bytes,
+                file_name=st.session_state.report_file_name,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="side_panel_excel_download",
+                use_container_width=True,
+            )
+        else:
+            st.info("Excel report is not available in this dashboard session.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
         st.markdown('<div class="side-card"><div class="panel-title">INSIGHTS</div>', unsafe_allow_html=True)
         for icon, color, text in insights:
             st.markdown(f'<div class="insight-item"><div class="dot" style="background:{color};">{icon}</div><div>{text}</div></div>', unsafe_allow_html=True)
@@ -1451,7 +1449,7 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
 
         df = combined_df(selected_frames)
 
-        if selected_tab in ["Track Comparison", "Compare"]:
+        if selected_tab == "Track Comparison":
             render_compare_tab(selected_frames)
             return
 
@@ -1463,11 +1461,8 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
         if selected_tab == "Trends":
             render_trends_tab(selected_frames)
             return
-        if selected_tab == "Drilldown":
-            render_drilldown_tab(selected_frames)
-            return
-        if selected_tab == "Reports":
-            render_reports_tab()
+        if selected_tab == "Detailed Report":
+            render_detailed_report_tab(selected_frames)
             return
         render_aggregated_or_comparison_summary(selected_frames)
 
@@ -1494,13 +1489,13 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
                 fig.update_traces(texttemplate="%{text:.1f}s", textposition="outside")
                 fig.update_layout(height=330, margin=dict(l=8, r=10, t=5, b=95), xaxis_title="", yaxis_title="Seconds", legend_title="")
                 st.plotly_chart(fig, use_container_width=True)
-            goto_tab_button('View all APIs →', 'Drilldown', 'view_all_apis_btn')
+            goto_tab_button('View all APIs →', 'Detailed Report', 'view_all_apis_btn')
             st.markdown("</div>", unsafe_allow_html=True)
 
         with c2:
             st.markdown('<div class="panel"><div class="panel-title">SLA Status</div>', unsafe_allow_html=True)
             st.plotly_chart(sla_donut(df), use_container_width=True)
-            goto_tab_button('View SLA Breaches →', 'Drilldown', 'view_sla_breaches_btn')
+            goto_tab_button('View SLA Breaches →', 'Detailed Report', 'view_sla_breaches_btn')
             st.markdown("</div>", unsafe_allow_html=True)
 
         with c3:
@@ -1513,7 +1508,7 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.info("No API errors found.")
-            goto_tab_button('View all Errors →', 'Drilldown', 'view_all_errors_btn')
+            goto_tab_button('View all Errors →', 'Detailed Report', 'view_all_errors_btn')
             st.markdown("</div>", unsafe_allow_html=True)
 
         c4, c5 = st.columns([1.05, 1.45], gap="medium")
@@ -2196,6 +2191,56 @@ def render_main_page() -> None:
     )
 
 
+def render_management_landing_page() -> None:
+    st.markdown(
+        f"""
+<div class="hero-title-box">
+  <h1>{APP_TITLE}</h1>
+</div>
+<div class="hero-subtitle">
+  Management dashboard access is view-only. Please use the dashboard link shared by the performance team to review the latest results.
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+<div class="main-page-card upload-card">
+  <h3 style="margin-top:0;color:#0f2b68;">Performance Results Portal</h3>
+  <p style="color:#475569;margin-bottom:10px;">Upload and report generation are restricted to the performance team.</p>
+  <p style="color:#64748b;margin-bottom:0;">For team upload access, open this app with <code>?view=team-upload</code>.</p>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+
+def team_upload_access_granted() -> bool:
+    try:
+        expected = st.secrets.get("UPLOAD_PASSCODE", "")
+    except Exception:
+        expected = ""
+    if not expected:
+        return True
+    entered = st.text_input("Team upload passcode", type="password")
+    if entered == expected:
+        return True
+    st.info("Enter the team upload passcode to generate reports.")
+    return False
+
+
+def latest_saved_report_paths() -> Tuple[List[Path], List[str]]:
+    uploads = normalize_saved_uploads(load_saved_uploads())
+    paths = []
+    labels = []
+    for item in uploads:
+        path = SAVED_REPORTS_DIR / item.get("saved_name", "")
+        if path.exists():
+            paths.append(path)
+            labels.append(Path(item.get("file_name", path.name)).stem)
+    return paths, labels
+
+
 
 def dashboard_url_for_run(run_id_value: str) -> str:
     return f"?view=dashboard&run_id={run_id_value}"
@@ -2301,49 +2346,61 @@ if dashboard_only:
         render_executive_dashboard(st.session_state.run_frames)
     else:
         st.warning("No dashboard data found for this tab. Please generate the report from the main page and click Open Dashboard in New Tab again.")
-else:
+elif team_upload_view:
     render_main_page()
-    render_latest_uploads_panel()
-    uploaded_files = st.file_uploader("Upload JMeter statistics.json file(s)", type=["json"], accept_multiple_files=True)
-    save_reports = st.checkbox(
-        "Save uploaded reports for team visibility",
-        value=True,
-        key="save_reports_checkbox"
-    )
-    generate_clicked = st.button("Generate Results", type="primary", disabled=not uploaded_files)
-    if uploaded_files and generate_clicked:
-        if st.session_state.get('save_reports_checkbox', True):
-            save_uploaded_files_to_latest(uploaded_files)
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir = Path(tmpdir)
-            json_paths: List[Path] = []
-            labels: List[str] = []
-            run_frames: List[Dict[str, pd.DataFrame]] = []
-            for idx, uploaded_file in enumerate(uploaded_files, start=1):
-                clean_name = uploaded_file.name.replace(" ", "_")
-                path = tmpdir / f"{idx}_{clean_name}"
-                path.write_bytes(uploaded_file.getvalue())
-                json_paths.append(path)
-                label = Path(uploaded_file.name).stem
-                labels.append(label)
-                run_frames.append(process_uploaded_file(path, label))
-            output_path = tmpdir / "JMeter_Report.xlsx"
-            try:
-                if len(json_paths) == 1:
-                    build_report(json_paths[0], output_path)
-                else:
-                    build_comparison_report(json_paths, labels, output_path)
-                run_frames = add_region_to_frames(run_frames)
-                excel_bytes = output_path.read_bytes()
-                new_run_id = uuid.uuid4().hex
-                dashboard_store[new_run_id] = {"run_frames": run_frames, "excel_bytes": excel_bytes, "report_file_name": "JMeter_Report.xlsx"}
-                st.session_state.excel_bytes = excel_bytes
-                st.session_state.run_frames = run_frames
-                st.session_state.report_file_name = "JMeter_Report.xlsx"
-                st.session_state.messages = []
-                st.session_state.run_id = new_run_id
-                st.toast("Report generated successfully.", icon="✅")
-            except Exception as exc:
-                st.error(f"Failed to generate report: {exc}")
+    if team_upload_access_granted():
+        render_latest_uploads_panel()
+        uploaded_files = st.file_uploader("Upload JMeter statistics.json file(s)", type=["json"], accept_multiple_files=True)
+        save_reports = st.checkbox(
+            "Save uploaded reports for team visibility",
+            value=True,
+            key="save_reports_checkbox"
+        )
+        generate_clicked = st.button("Generate Results", type="primary", disabled=not uploaded_files)
+        if uploaded_files and generate_clicked:
+            if st.session_state.get('save_reports_checkbox', True):
+                save_uploaded_files_to_latest(uploaded_files)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmpdir = Path(tmpdir)
+                json_paths: List[Path] = []
+                labels: List[str] = []
+                run_frames: List[Dict[str, pd.DataFrame]] = []
+                for idx, uploaded_file in enumerate(uploaded_files, start=1):
+                    clean_name = uploaded_file.name.replace(" ", "_")
+                    path = tmpdir / f"{idx}_{clean_name}"
+                    path.write_bytes(uploaded_file.getvalue())
+                    json_paths.append(path)
+                    label = Path(uploaded_file.name).stem
+                    labels.append(label)
+                    run_frames.append(process_uploaded_file(path, label))
+                output_path = tmpdir / "JMeter_Report.xlsx"
+                try:
+                    if len(json_paths) == 1:
+                        build_report(json_paths[0], output_path)
+                    else:
+                        build_comparison_report(json_paths, labels, output_path)
+                    run_frames = add_region_to_frames(run_frames)
+                    excel_bytes = output_path.read_bytes()
+                    new_run_id = uuid.uuid4().hex
+                    dashboard_store[new_run_id] = {"run_frames": run_frames, "excel_bytes": excel_bytes, "report_file_name": "JMeter_Report.xlsx"}
+                    st.session_state.excel_bytes = excel_bytes
+                    st.session_state.run_frames = run_frames
+                    st.session_state.report_file_name = "JMeter_Report.xlsx"
+                    st.session_state.messages = []
+                    st.session_state.run_id = new_run_id
+                    st.toast("Report generated successfully.", icon="✅")
+                except Exception as exc:
+                    st.error(f"Failed to generate report: {exc}")
 
-    render_action_cards()
+        render_action_cards()
+else:
+    saved_paths, saved_labels = latest_saved_report_paths()
+    if saved_paths and not st.session_state.run_frames:
+        try:
+            generate_dashboard_from_json_paths(saved_paths, saved_labels)
+        except Exception as exc:
+            st.error(f"Unable to load latest management dashboard: {exc}")
+    if st.session_state.run_frames:
+        render_executive_dashboard(st.session_state.run_frames)
+    else:
+        render_management_landing_page()
