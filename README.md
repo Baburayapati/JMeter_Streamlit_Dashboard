@@ -84,9 +84,9 @@ streamlit run app.py
 2. Upload one JSON for normal report.
 3. Upload two or more JSONs for side-by-side comparison.
 4. Open the Executive Dashboard for leadership-ready KPIs, filters, trends and drilldowns.
-5. Download Excel or the Management Summary CSV for email/Teams sharing.
+5. Download Excel when detailed evidence is required.
 
-## Management Sharing Workflow
+## Dashboard Comparison Workflow
 
 Use this flow when sharing results with team members or higher management:
 
@@ -94,19 +94,9 @@ Use this flow when sharing results with team members or higher management:
 2. Keep **Save uploaded reports for team visibility** enabled so the latest 5 uploads remain available on the landing page.
 3. Click **Generate Results**.
 4. Share the Executive Dashboard view for interactive review.
-5. Download **Management Summary CSV** for a short status update containing health status, SLA compliance, error rate, worst track and region attention points.
-6. Download **Excel Report** when detailed evidence is required.
-
-## Management Summary
-
-The app now includes a share-ready management summary on the landing page after report generation and at the top of the dashboard Overview tab.
-
-- Overall health status: Green, Amber or Red.
-- Health Score, SLA Compliance, Error Rate, Avg Response and P95 Response.
-- Total APIs, samples and errors.
-- Best region and region needing attention.
-- Worst track by P95 latency.
-- CSV download for quick email or Teams sharing.
+5. For two or more uploaded files, the Overview summary shows each result separately with Diff columns against the first selected result, instead of cumulating all reports.
+6. Use Track Comparison to review each Region/Result as rows, with Avg, Min and Max rows for every Total or Track.
+7. Download **Excel Report** when detailed evidence is required.
 
 
 ## Latest v13 Updates
@@ -713,3 +703,12 @@ Changes added only:
 - Added safety cleanup so full file names cannot appear as comparison headers.
 - Removed Run column from Track Comparison rendering if present.
 - Data & Filters continue to use clean display labels and no fallback-all behavior on empty filter selections.
+
+
+## v84 Dashboard row comparison
+
+- Removed duplicate `Management Summary` and `Leadership Actions` panels from the Streamlit UI.
+- Multi-file Overview no longer cumulates uploaded reports in the top dashboard summary.
+- Multi-file Overview now shows each result separately with Diff columns against the first selected result.
+- Dashboard Track Comparison now shows Region and Result as row fields instead of putting regions in column names.
+- Every Total/Track has three rows per Region/Result: Avg, Min and Max.

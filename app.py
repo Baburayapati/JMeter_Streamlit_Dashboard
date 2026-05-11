@@ -723,85 +723,6 @@ def summarize_run(df: pd.DataFrame) -> Dict[str, float]:
     )
 
 
-def health_label(score: float, error_rate: float, sla_compliance: float) -> Tuple[str, str]:
-    score = float(score or 0)
-    error_rate = float(error_rate or 0)
-    sla_compliance = float(sla_compliance or 0)
-    if score >= 95 and error_rate <= 1 and sla_compliance >= 95:
-        return "Green", "Stable for leadership review"
-    if score >= 85 and error_rate <= 3 and sla_compliance >= 85:
-        return "Amber", "Monitor SLA breaches and errors"
-    return "Red", "Needs performance investigation"
-
-
-def management_summary(run_frames: List[Dict[str, pd.DataFrame]]) -> Tuple[pd.DataFrame, List[str]]:
-    df = combined_df(run_frames)
-    summary = summarize_run(df)
-    status, status_note = health_label(summary["performance_score"], summary["error_rate"], summary["sla_compliance"])
-    tracks = track_summary(df)
-
-    worst_track = "N/A"
-    worst_track_p95 = 0
-    if not tracks.empty:
-        worst_track = str(tracks.iloc[0].get("Feature", "N/A"))
-        worst_track_p95 = tracks.iloc[0].get("P95_Sec", 0)
-
-    rows = []
-    for frames in run_frames:
-        row = summarize_run(frames["APIs"])
-        row["Run"] = run_display_label(frames)
-        row["Region"] = frames.get("Region", region_from_frames(frames))
-        row["Health Status"], row["Action"] = health_label(row["performance_score"], row["error_rate"], row["sla_compliance"])
-        rows.append(row)
-    regional = pd.DataFrame(rows)
-
-    best_region = "N/A"
-    attention_region = "N/A"
-    if not regional.empty:
-        best_region = str(regional.sort_values(["sla_compliance", "error_rate"], ascending=[False, True]).iloc[0].get("Region", "N/A"))
-        attention_region = str(regional.sort_values(["error_rate", "p95_sec"], ascending=[False, False]).iloc[0].get("Region", "N/A"))
-
-    summary_df = pd.DataFrame([
-        {"Metric": "Overall Health", "Value": f"{status} - {status_note}"},
-        {"Metric": "Health Score", "Value": f"{summary['performance_score']}/100"},
-        {"Metric": "SLA Compliance", "Value": f"{summary['sla_compliance']}%"},
-        {"Metric": "Error Rate", "Value": f"{summary['error_rate']}%"},
-        {"Metric": "Avg Response", "Value": f"{summary['avg_sec']} sec"},
-        {"Metric": "P95 Response", "Value": f"{summary['p95_sec']} sec"},
-        {"Metric": "Total APIs", "Value": f"{summary['transactions']:,}"},
-        {"Metric": "Total Samples", "Value": f"{summary['samples']:,}"},
-        {"Metric": "Total Errors", "Value": f"{summary['errors']:,}"},
-        {"Metric": "Best Region", "Value": best_region},
-        {"Metric": "Region Needing Attention", "Value": attention_region},
-        {"Metric": "Worst Track by P95", "Value": f"{worst_track} ({round(float(worst_track_p95 or 0), 2)} sec)"},
-    ])
-
-    bullets = [
-        f"Overall status is {status}: {status_note.lower()}.",
-        f"SLA compliance is {summary['sla_compliance']}% with {summary['errors']:,} failed samples out of {summary['samples']:,} total samples.",
-        f"Worst track by P95 latency is {worst_track} at {round(float(worst_track_p95 or 0), 2)} sec.",
-        f"Best region is {best_region}; region needing attention is {attention_region}.",
-    ]
-    return summary_df, bullets
-
-
-def render_management_summary(run_frames: List[Dict[str, pd.DataFrame]], key_suffix: str) -> None:
-    summary_df, bullets = management_summary(run_frames)
-    st.markdown('<div class="panel"><div class="panel-title">MANAGEMENT SUMMARY <span class="tag">Share-ready</span></div>', unsafe_allow_html=True)
-    for bullet in bullets:
-        st.markdown(f"- {bullet}")
-    st.dataframe(summary_df, use_container_width=True, hide_index=True, height=455)
-    st.download_button(
-        "Download Management Summary CSV",
-        data=summary_df.to_csv(index=False).encode("utf-8"),
-        file_name="JMeter_Management_Summary.csv",
-        mime="text/csv",
-        key=f"management_summary_csv_{key_suffix}",
-        use_container_width=True,
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
 def safe_cols(df: pd.DataFrame, cols: List[str]) -> List[str]:
     return [c for c in cols if c in df.columns]
 
@@ -1068,6 +989,65 @@ body {{
     components.html(html, height=205, scrolling=False)
 
 
+def build_run_summary_table(run_frames: List[Dict[str, pd.DataFrame]]) -> pd.DataFrame:
+    rows = []
+    baseline = None
+    for index, frames in enumerate(run_frames):
+        row = summarize_run(frames["APIs"])
+        if baseline is None:
+            baseline = row.copy()
+        rows.append({
+            "Result": run_display_label(frames),
+            "Region": frames.get("Region", region_from_frames(frames)),
+            "Health Score": row["performance_score"],
+            "Health Diff": round(row["performance_score"] - baseline["performance_score"], 2),
+            "SLA Pass %": row["sla_compliance"],
+            "SLA Diff %": round(row["sla_compliance"] - baseline["sla_compliance"], 2),
+            "Error Rate %": row["error_rate"],
+            "Error Diff %": round(row["error_rate"] - baseline["error_rate"], 2),
+            "Avg Sec": row["avg_sec"],
+            "Avg Diff Sec": round(row["avg_sec"] - baseline["avg_sec"], 2),
+            "P95 Sec": row["p95_sec"],
+            "P95 Diff Sec": round(row["p95_sec"] - baseline["p95_sec"], 2),
+            "Errors": row["errors"],
+            "Error Diff": int(row["errors"] - baseline["errors"]),
+            "Samples": row["samples"],
+            "Baseline": "Yes" if index == 0 else "No",
+        })
+    return pd.DataFrame(rows)
+
+
+def render_aggregated_or_comparison_summary(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
+    if len(run_frames) <= 1:
+        kpi_cards(combined_df(run_frames))
+        return
+
+    summary = build_run_summary_table(run_frames)
+    st.markdown('<div class="panel"><div class="panel-title">AGGREGATED PERFORMANCE OVERVIEW METRICS <span class="tag">Per result vs baseline</span></div>', unsafe_allow_html=True)
+    st.caption("For multiple uploads, values are shown by result and the Diff columns compare each result against the first selected result instead of cumulating all reports.")
+    st.dataframe(summary, use_container_width=True, hide_index=True, height=245)
+
+    chart_df = summary.melt(
+        id_vars=["Result", "Region"],
+        value_vars=["SLA Diff %", "Error Diff %", "Avg Diff Sec", "P95 Diff Sec"],
+        var_name="Difference Metric",
+        value_name="Difference",
+    )
+    fig = px.bar(chart_df, x="Result", y="Difference", color="Difference Metric", barmode="group", text="Difference")
+    fig.update_traces(texttemplate="%{text:.2f}", textposition="outside")
+    fig.update_layout(height=320, margin=dict(l=8, r=12, t=10, b=85), xaxis_title="", yaxis_title="Difference vs baseline")
+    st.plotly_chart(fig, use_container_width=True)
+    st.download_button(
+        "Download Result Difference Summary CSV",
+        data=summary.to_csv(index=False).encode("utf-8"),
+        file_name="JMeter_Result_Difference_Summary.csv",
+        mime="text/csv",
+        key="result_difference_summary_csv",
+        use_container_width=True,
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
 def sla_donut(df: pd.DataFrame):
     counts = df["SLA Status"].value_counts().reset_index()
     counts.columns = ["SLA Status", "Count"]
@@ -1235,87 +1215,49 @@ def build_dashboard_track_comparison(run_frames: List[Dict[str, pd.DataFrame]]) 
     def build_section(tracks: List[str], is_askai: bool) -> pd.DataFrame:
         rows = []
         bucket_names = ["0-10sec %", "10-20sec %", "20-30sec %", ">30sec %"] if is_askai else ["0-2sec %", "3-4sec %", "4-6sec %", ">6sec %"]
+        row_targets = ["Total"] + tracks
 
-        row_keys = [("Total", "Avg"), ("", "Min"), ("", "Max")]
-        for track in tracks:
-            row_keys.extend([(track, "Avg"), ("", "Min"), ("", "Max")])
-
-        for track_label, metric in row_keys:
-            row = {"Track": track_label, "Metric": metric}
-            actual_track = None
-            if track_label and track_label != "Total":
-                actual_track = track_label
-            else:
-                # For Min/Max immediately after a track row, reuse previous track.
-                # Row-wise display keeps blank Track cells like Excel.
-                pass
-
-            # Determine effective track by walking prior nonblank track if needed.
-            if track_label in ["", "Total"]:
-                effective_track = None
-                if rows and rows[-1].get("_effective_track"):
-                    effective_track = rows[-1].get("_effective_track")
-            else:
-                effective_track = track_label
-
+        for target in row_targets:
             for frames in run_frames:
                 api_df = frames["APIs"].copy()
-                if track_label == "Total":
-                    if tracks:
-                        api_rows = api_df[api_df["Feature"].astype(str).isin(tracks)]
-                    else:
-                        api_rows = api_df
-                elif effective_track:
-                    api_rows = api_df[api_df["Feature"].astype(str) == str(effective_track)]
+                if target == "Total":
+                    api_rows = api_df[api_df["Feature"].astype(str).isin(tracks)] if tracks else api_df
                 else:
-                    # Blank Min/Max row for previous track or Total.
-                    prev_track = rows[-1].get("_effective_track") if rows else None
-                    if prev_track == "Total":
-                        api_rows = api_df[api_df["Feature"].astype(str).isin(tracks)] if tracks else api_df
-                    elif prev_track:
-                        api_rows = api_df[api_df["Feature"].astype(str) == str(prev_track)]
-                    else:
-                        api_rows = api_df
+                    api_rows = api_df[api_df["Feature"].astype(str) == str(target)]
 
-                label = run_display_label(frames)
-                # Never allow full filenames in dashboard comparison headers.
-                if len(label) > 40 or "CiscoIQ" in label or "SaaS" in label or "Support" in label:
-                    label = f"{frames.get('Region', region_from_frames(frames))} {infer_saved_report_info(frames.get('Label','')).get('users','NA')}VU-{infer_saved_report_info(frames.get('Label','')).get('devices','NA').replace(' Devices','')}"
-                values = metric_bucket_summary_for_rows(api_rows, metric, is_askai)
-                for name, value in zip(bucket_names + ["Max Seconds"], values):
-                    row[f"{label} | {name}"] = value
+                display_label = run_display_label(frames)
+                region = frames.get("Region", region_from_frames(frames))
+                for metric in ["Avg", "Min", "Max"]:
+                    values = metric_bucket_summary_for_rows(api_rows, metric, is_askai)
+                    row = {
+                        "Track": target,
+                        "Region": region,
+                        "Result": display_label,
+                        "Metric": metric,
+                    }
+                    for name, value in zip(bucket_names + ["Max Seconds"], values):
+                        row[name] = value
+                    rows.append(row)
 
-            if track_label:
-                row["_effective_track"] = track_label
-            elif rows:
-                row["_effective_track"] = rows[-1].get("_effective_track")
-            rows.append(row)
-
-        df = pd.DataFrame(rows)
-        if "_effective_track" in df.columns:
-            df = df.drop(columns=["_effective_track"])
-        return df
+        return pd.DataFrame(rows)
 
     return build_section(askai_tracks, True), build_section(other_tracks, False)
 
 
 def render_compare_tab(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
-    st.markdown('<div class="panel"><div class="panel-title">TRACK COMPARISON <span class="tag">Side-by-side by Region, Users and Devices</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel"><div class="panel-title">TRACK COMPARISON <span class="tag">Region rows by result</span></div>', unsafe_allow_html=True)
 
     askai_df, other_df = build_dashboard_track_comparison(run_frames)
-    for _df in [askai_df, other_df]:
-        if "Run" in _df.columns:
-            _df.drop(columns=["Run"], inplace=True)
 
     st.markdown("### AskAI Tracks")
-    st.caption("Columns are grouped by Region UsersVU-Devices")
+    st.caption("Each region/result is shown as rows. Every Total or Track has Avg, Min and Max rows for each region.")
     if not askai_df.empty:
         st.dataframe(askai_df, use_container_width=True, hide_index=True, height=420)
     else:
         st.info("No AskAI tracks found.")
 
     st.markdown("### Assets / Assessments / Home / Settings / Support Tracks")
-    st.caption("Columns are grouped by Region UsersVU-Devices")
+    st.caption("Each region/result is shown as rows. Every Total or Track has Avg, Min and Max rows for each region.")
     if not other_df.empty:
         st.dataframe(other_df, use_container_width=True, hide_index=True, height=620)
     else:
@@ -1426,26 +1368,7 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
         if selected_tab == "Reports":
             render_reports_tab()
             return
-        kpi_cards(df)
-
-        m1, m2 = st.columns([1.15, 1], gap="medium")
-        with m1:
-            render_management_summary(selected_frames, "overview")
-        with m2:
-            st.markdown('<div class="panel"><div class="panel-title">LEADERSHIP ACTIONS <span class="tag">Next steps</span></div>', unsafe_allow_html=True)
-            attention = track_summary(df).head(5)
-            if attention.empty:
-                st.info("No track-level performance risks found in the selected data.")
-            else:
-                st.write("Prioritize these areas before the next performance review:")
-                st.dataframe(
-                    attention[safe_cols(attention, ["Feature", "P95_Sec", "Avg_Sec", "Max_Sec", "Errors", "SLA Fail %"])],
-                    use_container_width=True,
-                    hide_index=True,
-                    height=300,
-                )
-            goto_tab_button('Open Drilldown →', 'Drilldown', 'leadership_drilldown_btn')
-            st.markdown("</div>", unsafe_allow_html=True)
+        render_aggregated_or_comparison_summary(selected_frames)
 
         st.markdown('<div class="grid-3">', unsafe_allow_html=True)
         # Streamlit does not nest into raw grid well; use columns instead.
@@ -1545,13 +1468,13 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
 
         if not askai_compare.empty:
             st.markdown("#### AskAI Tracks - Total")
-            askai_total = askai_compare.head(3).copy()
-            st.dataframe(askai_total, use_container_width=True, hide_index=True, height=160)
+            askai_total = askai_compare[askai_compare["Track"] == "Total"].copy()
+            st.dataframe(askai_total, use_container_width=True, hide_index=True, height=220)
 
         if not other_compare.empty:
             st.markdown("#### Assets / Assessments / Home / Settings / Support Tracks - Total")
-            other_total = other_compare.head(3).copy()
-            st.dataframe(other_total, use_container_width=True, hide_index=True, height=160)
+            other_total = other_compare[other_compare["Track"] == "Total"].copy()
+            st.dataframe(other_total, use_container_width=True, hide_index=True, height=220)
 
         goto_tab_button('Open Full Track Comparison →', 'Track Comparison', 'overview_full_compare_btn')
         st.markdown("</div>", unsafe_allow_html=True)
@@ -2258,12 +2181,6 @@ def render_action_cards() -> None:
             st.markdown('<div class="action-card-text">Open the dashboard chatbot and ask questions about SLA, slow APIs, errors, regions and comparisons.</div>', unsafe_allow_html=True)
             link_class = "action-link purple" if has_report else "action-link disabled"
             st.markdown(f'<a class="{link_class}" href="{chatbot_href}" target="_blank">Open Chatbot ↗</a>', unsafe_allow_html=True)
-
-    if has_report and st.session_state.get("run_frames"):
-        st.markdown("---")
-        render_management_summary(st.session_state.run_frames, "main")
-
-
 
 # Session state
 if "excel_bytes" not in st.session_state: st.session_state.excel_bytes = None
