@@ -669,3 +669,24 @@ Changes added only:
 - Saved report tooltip now backfills Devices when old metadata has N/A.
 - Dashboard Track Comparison now compares multiple reports correctly using a Run column and clean metric columns.
 - Overview Track Comparison Total section now shows total rows for every selected run/report.
+
+
+## v82 Dashboard comparison pivot + filters
+
+- Track Comparison dashboard changed from row-wise report stacking to side-by-side report comparison.
+- Run headers use Region + Users + Devices instead of full file names.
+- Overview Track Comparison Total section shows only 3 rows: Total Avg, Min, Max.
+- Data & Filters now use parsed filename fallback for Region, Date, Duration and preserve selected values with stable keys.
+- Empty filters now show a warning instead of silently returning all reports.
+
+
+## v83 Final Dashboard Comparison Header Fix
+
+- Track Comparison dashboard headers are forced to short format:
+  - APJC 50VU-100K
+  - EMEA 100VU-100K
+  - US 150VU-100K
+- Added VU format parsing, for filenames like 50VU-100K.
+- Added safety cleanup so full file names cannot appear as comparison headers.
+- Removed Run column from Track Comparison rendering if present.
+- Data & Filters continue to use clean display labels and no fallback-all behavior on empty filter selections.

@@ -1015,27 +1015,47 @@ def get_filtered_frames(run_frames: List[Dict[str, pd.DataFrame]]) -> List[Dict[
     for frames in run_frames:
         info = frames.get("Run_Info")
         info_row = info.iloc[0].to_dict() if info is not None and not info.empty else {}
+        label = frames["Label"]
+        inferred = infer_saved_report_info(label)
+        region = frames.get("Region", region_from_frames(frames))
+        if not region or region == "Unknown":
+            region = inferred.get("region", "Unknown")
+        date = str(info_row.get("Date", "N/A"))
+        if not date or date == "N/A":
+            date = inferred.get("date", "N/A")
+        duration = str(info_row.get("Duration", "N/A"))
+        if not duration or duration == "N/A":
+            duration = inferred.get("duration", "N/A")
         rows.append({
-            "Label": frames["Label"],
-            "Region": frames.get("Region", region_from_frames(frames)),
-            "Date": str(info_row.get("Date", "N/A")),
-            "Duration": str(info_row.get("Duration", "N/A")),
+            "Label": label,
+            "Display": run_display_label(frames),
+            "Region": region,
+            "Date": date,
+            "Duration": duration,
         })
     meta = pd.DataFrame(rows)
-    files = meta["Label"].tolist()
+    if meta.empty:
+        return run_frames
+
+    files = meta["Display"].tolist()
     dates = sorted(meta["Date"].astype(str).unique().tolist())
     regions = sorted(meta["Region"].astype(str).unique().tolist())
+
     st.markdown('<div class="side-card"><div class="panel-title">DATA & FILTERS</div>', unsafe_allow_html=True)
-    selected_files = st.multiselect("Result File", files, default=files)
-    selected_dates = st.multiselect("Date", dates, default=dates)
-    selected_regions = st.multiselect("Region", regions, default=regions)
+    selected_files = st.multiselect("Result File", files, default=files, key="dashboard_filter_files")
+    selected_dates = st.multiselect("Date", dates, default=dates, key="dashboard_filter_dates")
+    selected_regions = st.multiselect("Region", regions, default=regions, key="dashboard_filter_regions")
     st.markdown("</div>", unsafe_allow_html=True)
-    keep = meta[
-        meta["Label"].isin(selected_files)
-        & meta["Date"].isin(selected_dates)
-        & meta["Region"].isin(selected_regions)
+
+    if not selected_files or not selected_dates or not selected_regions:
+        return []
+
+    keep_labels = meta[
+        meta["Display"].isin(selected_files)
+        & meta["Date"].astype(str).isin(selected_dates)
+        & meta["Region"].astype(str).isin(selected_regions)
     ]["Label"].tolist()
-    return [frames for frames in run_frames if frames["Label"] in keep] or run_frames
+    return [frames for frames in run_frames if frames["Label"] in keep_labels]
 
 
 def auto_insights(run_frames: List[Dict[str, pd.DataFrame]]) -> List[Tuple[str, str, str]]:
@@ -1104,6 +1124,9 @@ def metric_bucket_summary(df: pd.DataFrame, track: str, metric: str, is_askai: b
 
 
 def build_dashboard_track_comparison(run_frames: List[Dict[str, pd.DataFrame]]) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    if not run_frames:
+        return pd.DataFrame(), pd.DataFrame()
+
     all_tracks = sorted(set().union(*[set(frames["APIs"]["Feature"].dropna().astype(str)) for frames in run_frames]))
     all_tracks = [t for t in all_tracks if t.lower() != "total" and "select customer" not in t.lower()]
 
@@ -1134,49 +1157,86 @@ def build_dashboard_track_comparison(run_frames: List[Dict[str, pd.DataFrame]]) 
         rows = []
         bucket_names = ["0-10sec %", "10-20sec %", "20-30sec %", ">30sec %"] if is_askai else ["0-2sec %", "3-4sec %", "4-6sec %", ">6sec %"]
 
-        for frames in run_frames:
-            label = frames["Label"]
-            region = frames.get("Region", region_from_frames(frames))
-            run_label = f"{region} - {label}" if region and region != "Unknown" else label
+        row_keys = [("Total", "Avg"), ("", "Min"), ("", "Max")]
+        for track in tracks:
+            row_keys.extend([(track, "Avg"), ("", "Min"), ("", "Max")])
 
-            # Total rows first for each report/run.
-            for metric in ["Avg", "Min", "Max"]:
-                row = {"Run": run_label, "Track": "Total" if metric == "Avg" else "", "Metric": metric}
+        for track_label, metric in row_keys:
+            row = {"Track": track_label, "Metric": metric}
+            actual_track = None
+            if track_label and track_label != "Total":
+                actual_track = track_label
+            else:
+                # For Min/Max immediately after a track row, reuse previous track.
+                # Row-wise display keeps blank Track cells like Excel.
+                pass
+
+            # Determine effective track by walking prior nonblank track if needed.
+            if track_label in ["", "Total"]:
+                effective_track = None
+                if rows and rows[-1].get("_effective_track"):
+                    effective_track = rows[-1].get("_effective_track")
+            else:
+                effective_track = track_label
+
+            for frames in run_frames:
                 api_df = frames["APIs"].copy()
-                if tracks:
-                    api_df = api_df[api_df["Feature"].astype(str).isin(tracks)]
-                values = metric_bucket_summary_for_rows(api_df, metric, is_askai)
-                for name, value in zip(bucket_names + ["Max Seconds"], values):
-                    row[name] = value
-                rows.append(row)
+                if track_label == "Total":
+                    if tracks:
+                        api_rows = api_df[api_df["Feature"].astype(str).isin(tracks)]
+                    else:
+                        api_rows = api_df
+                elif effective_track:
+                    api_rows = api_df[api_df["Feature"].astype(str) == str(effective_track)]
+                else:
+                    # Blank Min/Max row for previous track or Total.
+                    prev_track = rows[-1].get("_effective_track") if rows else None
+                    if prev_track == "Total":
+                        api_rows = api_df[api_df["Feature"].astype(str).isin(tracks)] if tracks else api_df
+                    elif prev_track:
+                        api_rows = api_df[api_df["Feature"].astype(str) == str(prev_track)]
+                    else:
+                        api_rows = api_df
 
-            for track in tracks:
-                for metric in ["Avg", "Min", "Max"]:
-                    row = {"Run": run_label, "Track": track if metric == "Avg" else "", "Metric": metric}
-                    api_rows = frames["APIs"][frames["APIs"]["Feature"].astype(str) == str(track)]
-                    values = metric_bucket_summary_for_rows(api_rows, metric, is_askai)
-                    for name, value in zip(bucket_names + ["Max Seconds"], values):
-                        row[name] = value
-                    rows.append(row)
-        return pd.DataFrame(rows)
+                label = run_display_label(frames)
+                # Never allow full filenames in dashboard comparison headers.
+                if len(label) > 40 or "CiscoIQ" in label or "SaaS" in label or "Support" in label:
+                    label = f"{frames.get('Region', region_from_frames(frames))} {infer_saved_report_info(frames.get('Label','')).get('users','NA')}VU-{infer_saved_report_info(frames.get('Label','')).get('devices','NA').replace(' Devices','')}"
+                values = metric_bucket_summary_for_rows(api_rows, metric, is_askai)
+                for name, value in zip(bucket_names + ["Max Seconds"], values):
+                    row[f"{label} | {name}"] = value
+
+            if track_label:
+                row["_effective_track"] = track_label
+            elif rows:
+                row["_effective_track"] = rows[-1].get("_effective_track")
+            rows.append(row)
+
+        df = pd.DataFrame(rows)
+        if "_effective_track" in df.columns:
+            df = df.drop(columns=["_effective_track"])
+        return df
 
     return build_section(askai_tracks, True), build_section(other_tracks, False)
 
 
 def render_compare_tab(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
-    st.markdown('<div class="panel"><div class="panel-title">TRACK COMPARISON <span class="tag">Same metrics as Excel Track_Comparison</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel"><div class="panel-title">TRACK COMPARISON <span class="tag">Side-by-side by Region, Users and Devices</span></div>', unsafe_allow_html=True)
 
     askai_df, other_df = build_dashboard_track_comparison(run_frames)
+    for _df in [askai_df, other_df]:
+        if "Run" in _df.columns:
+            _df.drop(columns=["Run"], inplace=True)
 
     st.markdown("### AskAI Tracks")
-    st.caption("Buckets: 0-10sec %, 10-20sec %, 20-30sec %, >30sec %, Max Seconds")
+    st.caption("Columns are grouped by Region UsersVU-Devices")
     if not askai_df.empty:
         st.dataframe(askai_df, use_container_width=True, hide_index=True, height=420)
     else:
         st.info("No AskAI tracks found.")
 
     st.markdown("### Assets / Assessments / Home / Settings / Support Tracks")
-    st.caption("Buckets: 0-2sec %, 3-4sec %, 4-6sec %, >6sec %, Max Seconds")
+    st.caption("Columns are grouped by Region UsersVU-Devices")
     if not other_df.empty:
         st.dataframe(other_df, use_container_width=True, hide_index=True, height=620)
     else:
@@ -1263,6 +1323,10 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
             st.markdown(f'<a class="primary-pill" href="{dashboard_url}?view=dashboard&tab=Overview" target="_blank" style="width:100%;text-align:center;">Open Dashboard in New Tab ↗</a>', unsafe_allow_html=True)
 
     with main_col:
+        if not selected_frames:
+            st.warning("No reports match the selected filters. Please update Data & Filters.")
+            return
+
         df = combined_df(selected_frames)
 
         if selected_tab in ["Track Comparison", "Compare"]:
@@ -1383,13 +1447,13 @@ def render_executive_dashboard(run_frames: List[Dict[str, pd.DataFrame]]) -> Non
 
         if not askai_compare.empty:
             st.markdown("#### AskAI Tracks - Total")
-            askai_total = askai_compare[askai_compare["Track"].eq("Total") | askai_compare["Track"].eq("")].copy()
-            st.dataframe(askai_total, use_container_width=True, hide_index=True, height=min(260, 80 + 35 * len(askai_total)))
+            askai_total = askai_compare.head(3).copy()
+            st.dataframe(askai_total, use_container_width=True, hide_index=True, height=160)
 
         if not other_compare.empty:
             st.markdown("#### Assets / Assessments / Home / Settings / Support Tracks - Total")
-            other_total = other_compare[other_compare["Track"].eq("Total") | other_compare["Track"].eq("")].copy()
-            st.dataframe(other_total, use_container_width=True, hide_index=True, height=min(260, 80 + 35 * len(other_total)))
+            other_total = other_compare.head(3).copy()
+            st.dataframe(other_total, use_container_width=True, hide_index=True, height=160)
 
         goto_tab_button('Open Full Track Comparison →', 'Track Comparison', 'overview_full_compare_btn')
         st.markdown("</div>", unsafe_allow_html=True)
@@ -1637,29 +1701,33 @@ def infer_saved_report_info(file_name: str) -> Dict[str, str]:
         date = f"{month}-{day}-{year}"
 
     users = "N/A"
-    # Supports: 100Users, 100_Users, 100 Concurrent Users, ConcurrentUsers100
     user_patterns = [
         r"(\d+(?:\.\d+)?\s*K?)\s*[_\-\s]*(?:CONCURRENT[_\-\s]*)?USERS?",
         r"(?:CONCURRENT[_\-\s]*)?USERS?[_\-\s]*(\d+(?:\.\d+)?\s*K?)",
+        r"(\d+(?:\.\d+)?\s*K?)\s*[_\-\s]*VU\b",
+        r"\bVU[_\-\s]*(\d+(?:\.\d+)?\s*K?)",
     ]
     for pattern in user_patterns:
-        user_match = re.search(pattern, upper)
-        if user_match:
-            users = user_match.group(1).replace(" ", "")
+        m = re.search(pattern, upper)
+        if m:
+            users = m.group(1).replace(" ", "")
             break
 
     devices = "N/A"
-    # Supports: 100KDevices, 100K_Devices, 100000Devices, 100 Devices, Devices100K
     device_patterns = [
         r"(\d+(?:\.\d+)?\s*K?)\s*[_\-\s]*DEVICES?",
         r"DEVICES?[_\-\s]*(\d+(?:\.\d+)?\s*K?)",
+        # Common compact comparison naming: 50VU-100K, 100VU_100K
+        r"\d+(?:\.\d+)?\s*K?\s*[_\-\s]*VU[_\-\s]*(\d+(?:\.\d+)?\s*K)\b",
+        r"\d+(?:\.\d+)?\s*K?\s*[_\-\s]*USERS?[_\-\s]*(\d+(?:\.\d+)?\s*K)\b",
     ]
     for pattern in device_patterns:
-        device_match = re.search(pattern, upper)
-        if device_match:
-            raw_devices = device_match.group(1).replace(" ", "")
-            devices = f"{raw_devices} Devices"
+        m = re.search(pattern, upper)
+        if m:
+            devices = m.group(1).replace(" ", "")
             break
+    if devices != "N/A":
+        devices = f"{devices} Devices"
 
     return {
         "region": region,
@@ -1668,6 +1736,46 @@ def infer_saved_report_info(file_name: str) -> Dict[str, str]:
         "users": users,
         "devices": devices,
     }
+
+
+def run_display_label(frames: Dict[str, pd.DataFrame]) -> str:
+    """Short comparison label: Region UsersVU-Devices, never full filename."""
+    label = str(frames.get("Label", ""))
+    info = infer_saved_report_info(label)
+
+    region = frames.get("Region", region_from_frames(frames))
+    if not region or region == "Unknown":
+        region = info.get("region", "Unknown")
+
+    users = info.get("users", "N/A")
+    devices = info.get("devices", "N/A")
+
+    run_info = frames.get("Run_Info")
+    if run_info is not None and not run_info.empty:
+        row = run_info.iloc[0].to_dict()
+        if not users or users == "N/A":
+            users = str(row.get("Concurrent Users", row.get("Users", "N/A")))
+        if not devices or devices == "N/A":
+            devices = str(row.get("Devices Count", row.get("Devices", "N/A")))
+
+    def clean_users(value: str) -> str:
+        value = str(value).strip()
+        value = re.sub(r"(?i)\s*(concurrent\s*)?users?\s*", "", value).strip()
+        value = re.sub(r"(?i)\s*vu\s*", "", value).strip()
+        return value if value and value.upper() != "N/A" else "NA"
+
+    def clean_devices(value: str) -> str:
+        value = str(value).strip()
+        value = re.sub(r"(?i)\s*devices?\s*", "", value).strip()
+        return value if value and value.upper() != "N/A" else "NA"
+
+    users_clean = clean_users(users)
+    devices_clean = clean_devices(devices)
+    region_clean = region if region and region != "Unknown" else "Region"
+
+    return f"{region_clean} {users_clean}VU-{devices_clean}"
+
+
 
 
 def normalize_saved_uploads(existing: List[Dict[str, str]]) -> List[Dict[str, str]]:
