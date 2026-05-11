@@ -712,3 +712,16 @@ Changes added only:
 - Multi-file Overview now shows each result separately with Diff columns against the first selected result.
 - Dashboard Track Comparison now shows Region and Result as row fields instead of putting regions in column names.
 - Every Total/Track has three rows per Region/Result: Avg, Min and Max.
+
+
+## v85 Aggregate KPI cards + comparison summary
+
+- Restored the top `AGGREGATED PERFORMANCE OVERVIEW METRICS` strip in the same icon-card format.
+- For multiple uploaded files, the KPI strip shows the latest selected result and `vs prev` deltas against the previous selected result.
+- Kept the detailed `COMPARISON SUMMARY` table and chart below the KPI strip.
+
+
+## v86 Track Comparison grouped rows
+
+- Removed the separate Region column from dashboard Track Comparison because Region is already shown in Result.
+- Grouped repeated Track and Result values by leaving duplicate cells blank across Avg, Min and Max rows.

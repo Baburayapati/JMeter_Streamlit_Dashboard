@@ -1257,6 +1257,7 @@ def build_dashboard_track_comparison(run_frames: List[Dict[str, pd.DataFrame]]) 
         row_targets = ["Total"] + tracks
 
         for target in row_targets:
+            first_target_row = True
             for frames in run_frames:
                 api_df = frames["APIs"].copy()
                 if target == "Total":
@@ -1265,18 +1266,17 @@ def build_dashboard_track_comparison(run_frames: List[Dict[str, pd.DataFrame]]) 
                     api_rows = api_df[api_df["Feature"].astype(str) == str(target)]
 
                 display_label = run_display_label(frames)
-                region = frames.get("Region", region_from_frames(frames))
-                for metric in ["Avg", "Min", "Max"]:
+                for metric_index, metric in enumerate(["Avg", "Min", "Max"]):
                     values = metric_bucket_summary_for_rows(api_rows, metric, is_askai)
                     row = {
-                        "Track": target,
-                        "Region": region,
-                        "Result": display_label,
+                        "Track": target if first_target_row else "",
+                        "Result": display_label if metric_index == 0 else "",
                         "Metric": metric,
                     }
                     for name, value in zip(bucket_names + ["Max Seconds"], values):
                         row[name] = value
                     rows.append(row)
+                    first_target_row = False
 
         return pd.DataFrame(rows)
 
@@ -1284,19 +1284,19 @@ def build_dashboard_track_comparison(run_frames: List[Dict[str, pd.DataFrame]]) 
 
 
 def render_compare_tab(run_frames: List[Dict[str, pd.DataFrame]]) -> None:
-    st.markdown('<div class="panel"><div class="panel-title">TRACK COMPARISON <span class="tag">Region rows by result</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel"><div class="panel-title">TRACK COMPARISON <span class="tag">Grouped by result</span></div>', unsafe_allow_html=True)
 
     askai_df, other_df = build_dashboard_track_comparison(run_frames)
 
     st.markdown("### AskAI Tracks")
-    st.caption("Each region/result is shown as rows. Every Total or Track has Avg, Min and Max rows for each region.")
+    st.caption("Result includes the region. Repeated Track and Result cells are intentionally blank to keep Avg, Min and Max rows grouped together.")
     if not askai_df.empty:
         st.dataframe(askai_df, use_container_width=True, hide_index=True, height=420)
     else:
         st.info("No AskAI tracks found.")
 
     st.markdown("### Assets / Assessments / Home / Settings / Support Tracks")
-    st.caption("Each region/result is shown as rows. Every Total or Track has Avg, Min and Max rows for each region.")
+    st.caption("Result includes the region. Repeated Track and Result cells are intentionally blank to keep Avg, Min and Max rows grouped together.")
     if not other_df.empty:
         st.dataframe(other_df, use_container_width=True, hide_index=True, height=620)
     else:
